@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+          Debug-only seed activity. Triggered via:
+            adb shell am start -n com.coolappstore.evercallrecorder.by.svhp.debug/com.coolappstore.evercallrecorder.by.svhp.debug.SeedDataActivity
+          Wipes the recordings DB and inserts realistic-looking calls so we
+          can grab screenshots without staging real conversations.
+
+          MUST be exported=true: on Samsung One UI 16+ the shell user can NOT
+          start non-exported activities even on debuggable builds (verified
+          on SM-S931B, Permission Denial via `am start`). The on-device DoS
+          risk identified in the security audit (any installed app could
+          wipe the recordings DB by sending an Intent here) is mitigated at
+          runtime instead — see SeedDataActivity.onCreate's launchedFromUid
+          gate, which only honours invocations from SHELL or our own UID.
+        -->
+        <activity
+            android:name="com.coolappstore.evercallrecorder.by.svhp.debug.SeedDataActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:label="Seed Data" />
+
+        <activity
+            android:name="com.coolappstore.evercallrecorder.by.svhp.debug.DaemonHealthDebugActivity"
+            android:exported="false"
+            android:label="cally Health Debug" />
+    </application>
+</manifest>

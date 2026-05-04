@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Daemon health notifications -->
+    <string name="daemon_notinstalled_title">cally: Shizuku не встановлено</string>
+    <string name="daemon_notinstalled_body">Натисніть, щоб налаштувати</string>
+    <string name="daemon_notrunning_title">cally: Shizuku зупинений</string>
+    <string name="daemon_notrunning_body">Перезапустіть Shizuku, щоб записувати дзвінки</string>
+    <string name="daemon_nopermission_title">cally: потрібен дозвіл</string>
+    <string name="daemon_nopermission_body">Натисніть, щоб надати доступ Shizuku</string>
+    <string name="daemon_stale_title">cally: потрібен перезапуск</string>
+    <string name="daemon_stale_body">Натисніть, щоб оновити рекордер</string>
+    <string name="daemon_unhealthy_title">cally: рекордер не відповідає</string>
+    <string name="daemon_unhealthy_body">Натисніть, щоб перезапустити</string>
+    <string name="overlay_perm_missing_title">cally: потрібен дозвіл накладання</string>
+    <string name="overlay_perm_missing_body">Без нього неможливо записувати на Android 14+</string>
+
+    <!-- Onboarding tip -->
+    <string name="onboarding_shizuku_tip_title">Для кращої надійності</string>
+    <string name="onboarding_shizuku_tip_body">Розгляньте community-збірки Shizuku з автоперезапуском і збереженим ADB-pairing\'ом.</string>
+    <string name="onboarding_shizuku_tip_cta">Докладніше</string>
+
+    <!-- POST_NOTIFICATIONS rationale -->
+    <string name="onboarding_notif_perm_title">Дозволити сповіщення</string>
+    <string name="onboarding_notif_perm_body">Потрібно, щоб попередити, якщо Shizuku перестав працювати.</string>
+</resources>
