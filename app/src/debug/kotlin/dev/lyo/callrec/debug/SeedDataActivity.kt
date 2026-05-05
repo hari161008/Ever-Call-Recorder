@@ -7,6 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import com.coolappstore.evercallrecorder.by.svhp.App
 import com.coolappstore.evercallrecorder.by.svhp.recorder.Strategy
+import com.coolappstore.evercallrecorder.by.svhp.storage.CallDao
 import com.coolappstore.evercallrecorder.by.svhp.storage.CallRecord
 import com.coolappstore.evercallrecorder.by.svhp.telephony.CallMonitorService
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,7 @@ import java.util.UUID
  * Debug-only entrypoint that wipes the recordings DB and seeds 8 plausible
  * sample calls so we can grab clean screenshots. Trigger from a host shell:
  *
- *   adb shell am start -n dev.lyo.callrec.debug/dev.lyo.callrec.debug.SeedDataActivity
+ *   adb shell am start -n com.coolappstore.evercallrecorder.by.svhp.debug/com.coolappstore.evercallrecorder.by.svhp.debug.SeedDataActivity
  *
  * Lives under `app/src/debug/` so it cannot ship in a release build.
  *
@@ -275,7 +276,7 @@ class SeedDataActivity : Activity() {
         out.writeBytes(buf.array())
     }
 
-    private suspend fun dev.lyo.callrec.storage.CallDao.observeAllOnce(): List<CallRecord> =
+    private suspend fun CallDao.observeAllOnce(): List<CallRecord> =
         observeAll().first()
 
     companion object {

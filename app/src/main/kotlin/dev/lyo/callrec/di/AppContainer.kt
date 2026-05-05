@@ -7,7 +7,6 @@ import com.coolappstore.evercallrecorder.by.svhp.playback.MediaSessionHolder
 import com.coolappstore.evercallrecorder.by.svhp.recorder.CapabilitiesStore
 import com.coolappstore.evercallrecorder.by.svhp.recorder.RecorderController
 import com.coolappstore.evercallrecorder.by.svhp.recorder.ShizukuClient
-import com.coolappstore.evercallrecorder.by.svhp.settings.AppSettings
 import com.coolappstore.evercallrecorder.by.svhp.settings.RecordingFormat
 import com.coolappstore.evercallrecorder.by.svhp.storage.RecordingStorage
 import com.coolappstore.evercallrecorder.by.svhp.storage.RecordingsDb
@@ -17,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import com.coolappstore.evercallrecorder.by.svhp.settings.AppSettings
 
 private val Context.dataStore by preferencesDataStore(name = "callrec.settings")
 

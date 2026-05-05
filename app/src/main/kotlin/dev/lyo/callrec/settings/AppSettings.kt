@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.coolappstore.evercallrecorder.by.svhp.core.CryptoBox
 
 /** On-disk container choice. AAC defaults — ~5–8x smaller than WAV for voice. */
 enum class RecordingFormat { WAV, AAC }
@@ -58,11 +59,11 @@ class AppSettings(private val store: DataStore<Preferences>) {
     // legacy plaintext keys load via passthrough until the next save re-encrypts.
     val sttApiKey: Flow<String> = store.data.map {
         val raw = it[KEY_STT_API_KEY] ?: ""
-        if (raw.isBlank()) "" else dev.lyo.callrec.core.CryptoBox.decryptOrPassthrough(raw)
+        if (raw.isBlank()) "" else CryptoBox.decryptOrPassthrough(raw)
     }
     suspend fun setSttApiKey(v: String) = store.edit {
         if (v.isBlank()) it.remove(KEY_STT_API_KEY)
-        else it[KEY_STT_API_KEY] = dev.lyo.callrec.core.CryptoBox.encrypt(v)
+        else it[KEY_STT_API_KEY] = CryptoBox.encrypt(v)
     }
 
     val sttModel: Flow<String> = store.data.map { it[KEY_STT_MODEL] ?: DEFAULT_STT_MODEL }

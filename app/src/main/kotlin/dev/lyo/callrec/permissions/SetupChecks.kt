@@ -5,6 +5,7 @@ import android.content.Context
 import android.provider.Settings
 import com.coolappstore.evercallrecorder.by.svhp.di.AppContainer
 import com.coolappstore.evercallrecorder.by.svhp.recorder.DaemonHealth
+import com.coolappstore.evercallrecorder.by.svhp.accessibility.AccessibilityHelper
 
 /**
  * Single source of truth for "is the app set up well enough to record?".
@@ -42,7 +43,7 @@ data class SetupStatus(
                 runtimePermsGranted = AppPermissions.allGranted(ctx),
                 overlayGranted = Settings.canDrawOverlays(ctx),
                 batteryExempt = BatteryOptimizations.isIgnoring(ctx),
-                accessibilityEnabled = dev.lyo.callrec.accessibility.AccessibilityHelper.isEnabled(ctx),
+                accessibilityEnabled = AccessibilityHelper.isEnabled(ctx),
             )
         }
     }

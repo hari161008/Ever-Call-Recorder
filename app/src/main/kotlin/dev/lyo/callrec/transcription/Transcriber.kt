@@ -5,7 +5,6 @@ import android.content.Context
 import android.util.Base64
 import com.coolappstore.evercallrecorder.by.svhp.core.L
 import com.coolappstore.evercallrecorder.by.svhp.di.AppContainer
-import com.coolappstore.evercallrecorder.by.svhp.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -16,6 +15,7 @@ import java.io.File
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import com.coolappstore.evercallrecorder.by.svhp.settings.AppSettings
 
 /**
  * Cloud-based speech-to-text using any OpenAI-compatible chat-completions

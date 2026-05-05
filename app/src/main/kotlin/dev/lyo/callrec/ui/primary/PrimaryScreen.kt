@@ -124,6 +124,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.absoluteValue
+import com.coolappstore.evercallrecorder.by.svhp.transcription.TranscriptCodec
 
 /**
  * The single primary screen. One canonical place where the user lands:
@@ -925,7 +926,7 @@ private fun displayTitle(ctx: Context, rec: CallRecord): String {
     // voice memos this turns "Голосовий запис · 28 квіт, 15:42" into
     // something descriptive like "Список покупок і плани на вихідні".
     // Cheap to extract: a single JSONObject parse, no full transcript load.
-    val aiTitle = dev.lyo.callrec.transcription.TranscriptCodec.extractTitle(rec.transcript)
+    val aiTitle = TranscriptCodec.extractTitle(rec.transcript)
     if (isVoiceMemo(rec)) {
         if (!aiTitle.isNullOrBlank()) return aiTitle
         val stamp = VOICE_MEMO_FMT.format(Instant.ofEpochMilli(rec.startedAt))

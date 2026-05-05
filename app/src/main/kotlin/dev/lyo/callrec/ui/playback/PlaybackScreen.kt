@@ -103,6 +103,12 @@ import java.io.File
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToLong
+import com.coolappstore.evercallrecorder.by.svhp.codec.AudioMixer
+import com.coolappstore.evercallrecorder.by.svhp.playback.ScreenPlaybackController
+import com.coolappstore.evercallrecorder.by.svhp.transcription.TranscribeJob
+import com.coolappstore.evercallrecorder.by.svhp.transcription.TranscribeState
+import com.coolappstore.evercallrecorder.by.svhp.transcription.Transcript
+import com.coolappstore.evercallrecorder.by.svhp.transcription.TranscriptCodec
 
 private val SPEED_OPTIONS = listOf(0.5f, 1f, 1.5f, 2f)
 
@@ -239,7 +245,7 @@ fun PlaybackScreen(
     // Build a controller mirror of the in-screen player state. The session
     // holder keeps a single MediaSession at app level so lockscreen and
     // shade controls stay consistent across screen transitions.
-    val playbackController = remember { dev.lyo.callrec.playback.ScreenPlaybackController() }
+    val playbackController = remember { ScreenPlaybackController() }
     // Lambdas read from current scope; updated below on every state change.
     fun togglePlay(target: Boolean) {
         if (!preparedA) return
@@ -531,7 +537,7 @@ fun PlaybackScreen(
                         ) mixed
                         else {
                             mixed.parentFile?.mkdirs()
-                            dev.lyo.callrec.codec.AudioMixer
+                            AudioMixer
                                 .mixNormalizedMonoForStt(priFile, secFile, mixed) ?: priFile
                         }
                     }
@@ -961,14 +967,14 @@ private fun TranscriptionSection(
 ) {
     val ctx = LocalContext.current
     val job = remember(callId) {
-        dev.lyo.callrec.transcription.TranscribeJob(container)
+        TranscribeJob(container)
     }
     val state by job.state.collectAsState()
     val rawJson: String? = when (val s = state) {
-        is dev.lyo.callrec.transcription.TranscribeState.Done -> s.text
+        is TranscribeState.Done -> s.text
         else -> persistedTranscript
     }
-    val parsed = remember(rawJson) { dev.lyo.callrec.transcription.TranscriptCodec.parse(rawJson) }
+    val parsed = remember(rawJson) { TranscriptCodec.parse(rawJson) }
 
     // No surrounding Card — the transcript chat lays out flush with the
     // surrounding playback content so each segment bubble carries its own
@@ -978,7 +984,7 @@ private fun TranscriptionSection(
     Column(modifier = Modifier.fillMaxWidth()) {
         FilledTonalButton(
             onClick = { job.start(callId, audioPath) },
-            enabled = state !is dev.lyo.callrec.transcription.TranscribeState.Running,
+            enabled = state !is TranscribeState.Running,
         ) {
             Icon(
                 Icons.AutoMirrored.Outlined.Article,
@@ -990,7 +996,7 @@ private fun TranscriptionSection(
         }
 
         when (val s = state) {
-            is dev.lyo.callrec.transcription.TranscribeState.Running -> {
+            is TranscribeState.Running -> {
                 Spacer(Modifier.height(10.dp))
                 Text(
                     stringResource(R.string.playback_transcribe_running),
@@ -1003,7 +1009,7 @@ private fun TranscriptionSection(
                         .padding(top = 8.dp),
                 )
             }
-            is dev.lyo.callrec.transcription.TranscribeState.Error -> {
+            is TranscribeState.Error -> {
                 Spacer(Modifier.height(10.dp))
                 Text(
                     s.message,
@@ -1051,7 +1057,7 @@ private fun TranscriptionSection(
  */
 @Composable
 private fun TranscriptView(
-    transcript: dev.lyo.callrec.transcription.Transcript,
+    transcript: Transcript,
     onSeek: (ms: Int) -> Unit,
 ) {
     val accents = speakerAccents(transcript.speakers)
@@ -1120,7 +1126,7 @@ private data class SpeakerAccent(
  */
 @Composable
 private fun speakerAccents(
-    speakers: List<dev.lyo.callrec.transcription.Transcript.SpeakerInfo>,
+    speakers: List<Transcript.SpeakerInfo>,
 ): Map<String, SpeakerAccent> {
     val cs = MaterialTheme.colorScheme
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -1129,7 +1135,7 @@ private fun speakerAccents(
     val selfAccent = SpeakerAccent(cs.primary, cs.onPrimary, isSelf = true)
     val map = LinkedHashMap<String, SpeakerAccent>()
     speakers.forEachIndexed { idx, s ->
-        val isSelf = s.id == dev.lyo.callrec.transcription.Transcript.LEGACY_ME ||
+        val isSelf = s.id == Transcript.LEGACY_ME ||
             (idx == 0 && speakers.size > 1)
         map[s.id] = if (isSelf) selfAccent else slots[idx % slots.size]
     }
@@ -1170,15 +1176,15 @@ private fun chatAccents(dark: Boolean): List<SpeakerAccent> = if (dark) {
 }
 
 private fun legacyDisplayLabel(id: String): String = when (id) {
-    dev.lyo.callrec.transcription.Transcript.LEGACY_ME -> "Я"
-    dev.lyo.callrec.transcription.Transcript.LEGACY_THEM -> "Співрозмовник"
-    dev.lyo.callrec.transcription.Transcript.LEGACY_UNKNOWN -> "—"
+    Transcript.LEGACY_ME -> "Я"
+    Transcript.LEGACY_THEM -> "Співрозмовник"
+    Transcript.LEGACY_UNKNOWN -> "—"
     else -> id
 }
 
 @Composable
 private fun ChatSegment(
-    seg: dev.lyo.callrec.transcription.Transcript.Segment,
+    seg: Transcript.Segment,
     accent: SpeakerAccent,
     speakerLabel: String,
     isFirstOfGroup: Boolean,

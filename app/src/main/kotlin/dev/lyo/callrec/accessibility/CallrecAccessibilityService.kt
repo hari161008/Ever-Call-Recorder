@@ -11,7 +11,7 @@ import android.view.accessibility.AccessibilityEvent
  * in Settings → Accessibility, which is one of the platform-recognised
  * exemptions for "FGS of type=microphone started from background". We do
  * NOT actually use accessibility for telephony observation — that's done
- * by [dev.lyo.callrec.telephony.CallStateReceiver] (manifest broadcast).
+ * by [com.coolappstore.evercallrecorder.by.svhp.telephony.CallStateReceiver] (manifest broadcast).
  *
  * This service does nothing while running. It deliberately doesn't read
  * window content, doesn't track gestures, doesn't spy on anything.

@@ -15,7 +15,7 @@ plugins {
 //   - VERSION_CODE_USERSERVICE → bumped whenever the AIDL contract or pump
 //                          semantics change; `daemon=true` daemons surviving
 //                          an upgrade compare versions and respawn if stale.
-val appPackageId = "dev.lyo.callrec"
+val appPackageId = "com.coolappstore.evercallrecorder.by.svhp"
 // Bump on every change to RecorderService / AudioRecorderJob / verifyCaller —
 // the Shizuku daemon (daemon=true) checks this and respawns if its in-memory
 // version differs from the freshly-installed APK's version.

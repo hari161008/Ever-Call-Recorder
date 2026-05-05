@@ -7,7 +7,6 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import com.coolappstore.evercallrecorder.by.svhp.BuildConfig
-import com.coolappstore.evercallrecorder.by.svhp.aidl.IRecorderService
 import com.coolappstore.evercallrecorder.by.svhp.core.L
 import com.coolappstore.evercallrecorder.by.svhp.userservice.RecorderService
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +20,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import rikka.shizuku.Shizuku
+import com.coolappstore.evercallrecorder.by.svhp.aidl.IRecorderService
 
 class ShizukuClient(private val ctx: Context) {
 

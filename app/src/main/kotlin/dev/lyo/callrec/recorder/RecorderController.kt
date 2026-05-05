@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.coolappstore.evercallrecorder.by.svhp.aidl.IRecorderService
 
 /**
  * Smart recorder. Combines a hard-coded fallback ladder with an in-call live
@@ -254,7 +255,7 @@ class RecorderController(
     }
 
     private suspend fun startVoiceMemo(
-        svc: dev.lyo.callrec.aidl.IRecorderService,
+        svc: IRecorderService,
         callId: String,
     ) {
         _state.value = RecordingState.Probing(Strategy.SingleMic)
@@ -294,7 +295,7 @@ class RecorderController(
     }
 
     private fun openStrategy(
-        svc: dev.lyo.callrec.aidl.IRecorderService,
+        svc: IRecorderService,
         callId: String,
         strategy: Strategy,
     ): OpenResult = try {
@@ -315,7 +316,7 @@ class RecorderController(
     }
 
     private fun tryDual(
-        svc: dev.lyo.callrec.aidl.IRecorderService,
+        svc: IRecorderService,
         callId: String,
         strategy: Strategy,
     ): Outcome.Dual? {
@@ -355,7 +356,7 @@ class RecorderController(
     }
 
     private fun trySingle(
-        svc: dev.lyo.callrec.aidl.IRecorderService,
+        svc: IRecorderService,
         callId: String,
         strategy: Strategy,
     ): Outcome.Single? {

@@ -57,6 +57,7 @@ import com.coolappstore.evercallrecorder.by.svhp.settings.RecordingFormat
 import com.coolappstore.evercallrecorder.by.svhp.ui.components.strategyQuality
 import com.coolappstore.evercallrecorder.by.svhp.ui.legal.LegalDisclaimerSheet
 import kotlinx.coroutines.launch
+import com.coolappstore.evercallrecorder.by.svhp.settings.AppSettings
 
 @Composable
 fun SettingsScreen(
@@ -70,11 +71,11 @@ fun SettingsScreen(
     val sampleRate by container.settings.sampleRate.collectAsState(initial = 16_000)
     val format by container.settings.format.collectAsState(initial = RecordingFormat.AAC)
     val sttBaseUrl by container.settings.sttBaseUrl.collectAsState(
-        initial = dev.lyo.callrec.settings.AppSettings.DEFAULT_STT_BASE_URL,
+        initial = AppSettings.DEFAULT_STT_BASE_URL,
     )
     val sttApiKey by container.settings.sttApiKey.collectAsState(initial = "")
     val sttModel by container.settings.sttModel.collectAsState(
-        initial = dev.lyo.callrec.settings.AppSettings.DEFAULT_STT_MODEL,
+        initial = AppSettings.DEFAULT_STT_MODEL,
     )
     val cleanupAgeDays by container.settings.autoCleanupMaxAgeDays.collectAsState(initial = null)
     val cleanupSizeGb by container.settings.autoCleanupMaxSizeGb.collectAsState(initial = null)

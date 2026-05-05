@@ -187,7 +187,7 @@ class RecorderService : IRecorderService.Stub() {
             ?: throw SecurityException("verifyCaller: no packages for uid=$uid")
         val ourPkg = BuildConfig.APP_PACKAGE_ID
         // Accept the canonical package and any debug/internal-test variant
-        // (applicationIdSuffix produces "dev.lyo.callrec.debug"). The signing
+        // (applicationIdSuffix produces "com.coolappstore.evercallrecorder.by.svhp.debug"). The signing
         // cert pin below — when configured — keeps this safe; without it, the
         // prefix is still tighter than reality, since the only way for a
         // foreign app to inherit our UID is to share signature anyway.

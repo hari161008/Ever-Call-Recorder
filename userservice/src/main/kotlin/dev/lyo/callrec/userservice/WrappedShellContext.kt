@@ -25,7 +25,7 @@ import android.view.Display
  *      CAPTURE_AUDIO_OUTPUT, MODIFY_AUDIO_ROUTING via signature permissions.
  *      AudioFlinger's `createFromTrustedUidNoPackage` accepts (uid=2000,
  *      pkg="com.android.shell") because that's a real system principal.
- *      Pretending to be our own app (uid=2000 + "dev.lyo.callrec.debug")
+ *      Pretending to be our own app (uid=2000 + "com.coolappstore.evercallrecorder.by.svhp.debug")
  *      fails the same gate because that combination doesn't exist in the
  *      package database.
  *

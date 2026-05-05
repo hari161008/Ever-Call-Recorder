@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import com.coolappstore.evercallrecorder.by.svhp.ui.DummyActivity
 
 /**
  * Foreground service that owns one call's recording session end-to-end.
@@ -316,7 +317,7 @@ class CallMonitorService : LifecycleService() {
         // Safe even if recording is not active — DummyActivity finishes
         // immediately.
         try {
-            val intent = Intent(this, dev.lyo.callrec.ui.DummyActivity::class.java).apply {
+            val intent = Intent(this, DummyActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
@@ -402,10 +403,10 @@ class CallMonitorService : LifecycleService() {
         }
 
     companion object {
-        const val ACTION_MANUAL_START = "dev.lyo.callrec.action.MANUAL_START"
-        const val ACTION_MANUAL_STOP = "dev.lyo.callrec.action.MANUAL_STOP"
-        const val ACTION_CALL_START = "dev.lyo.callrec.action.CALL_START"
-        const val ACTION_CALL_END = "dev.lyo.callrec.action.CALL_END"
+        const val ACTION_MANUAL_START = "com.coolappstore.evercallrecorder.by.svhp.action.MANUAL_START"
+        const val ACTION_MANUAL_STOP = "com.coolappstore.evercallrecorder.by.svhp.action.MANUAL_STOP"
+        const val ACTION_CALL_START = "com.coolappstore.evercallrecorder.by.svhp.action.CALL_START"
+        const val ACTION_CALL_END = "com.coolappstore.evercallrecorder.by.svhp.action.CALL_END"
 
         const val EXTRA_PHONE_STATE = "phone_state"
         const val EXTRA_NUMBER = "number"
