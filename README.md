@@ -16,17 +16,11 @@ Ever Call Recorder is the best Open - Source Call recorder which uses Shizuku to
 # 📦 Latest Releases
 GitHub: [Download](https://github.com/hari161008/Ever-Call-Recorder/releases) ⬇️
 
-<br>
-
 # 🚀 Telegram Links
 
-🌐 Cool Apps Recommending Channel:
-<a href="https://t.me/CoolAppStore">Join Now</a>
-<br>
-📢 Everlasting Support Group:
-<a href="https://t.me/EverlastingAndroidTweak">Join Now</a>
-
-<br>
+🌐 Cool Apps Recommending Channel: <a href="https://t.me/CoolAppStore">Join Now</a> <br>
+📢 Everlasting Support Group: <a href="https://t.me/EverlastingAndroidTweak">Join Now</a> <br>
+🔭 To contact me through Telegram: <a href="https://t.me/hariprabhu1008">@hariprabhu1008</a>
 
 # 📱 Screenshots:
 
