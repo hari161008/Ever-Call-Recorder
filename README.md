@@ -29,39 +29,21 @@ GitHub: [Download](https://github.com/hari161008/Ever-Call-Recorder/releases) â¬
 # ðŸ“± Screenshots:
 
 <p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/1.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/2.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/3.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/1.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/2.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/3.png" width="32%"/>
 </p>
 
 <p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/4.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/5.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/6.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/4.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/5.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/6.png" width="32%"/>
 </p>
 
 <p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/7.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/8.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/9.png" width="32%"/>
-</p>
-
-<p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/10.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/11.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/12.png" width="32%"/>
-</p>
-
-<p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/13.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/14.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/15.png" width="32%"/>
-</p>
-
-<p align="center">
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/16.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/17.png" width="32%"/>
-  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Dialer/Screenshots/18.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/7.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/8.png" width="32%"/>
+  <img src="https://github.com/hari161008/Website-For-Everlasting-Android-Tweak/blob/main/Ever%20Call%20Recorder/Screenshots/9.png" width="32%"/>
 </p>
 
 <br>
