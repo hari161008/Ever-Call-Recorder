@@ -55,28 +55,23 @@ GitHub: [Download](https://github.com/hari161008/Ever-Call-Recorder/releases) �
 ┈➤ Call Recording<br>
 
 • 📞 Automatic Call Recording – Record incoming and outgoing calls automatically<br>
-
 • 🎙️ Two-Sided Recording – Capture voices from both sides of the conversation<br>
-
 • 👆 Manual Recording – Start call recording manually whenever needed<br><br>
 
 ┈➤ Storage Management<br>
 
 • 🗑️ Auto Cleanup by Time – Automatically delete old recordings after a selected period<br>
-
 • 💾 Auto Cleanup by Storage Limit – Remove older recordings when storage usage reaches a defined limit<br><br>
 
 ┈➤ Organization & Notes<br>
 
 • 📝 Recording Notes – Add personal notes to individual call recordings<br>
-
 • ⭐ Favorites Section – Star important recordings for quick access later<br>
-
 • 🕒 Sort by Time – Organize recordings based on call date and time<br><br>
 
 ┈➤ Audio Quality<br>
 
-• 🎚️ Adjustable Recording Quality – Choose recording quality to balance clarity and storage usage<br>
+• 🎚️ Adjustable Recording Quality – Choose recording quality to balance clarity and storage usage<br><br>
 
 # The App Which I Used As The Base
 ┈➤ [Cally](https://github.com/LyoSU/cally)
