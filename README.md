@@ -68,4 +68,4 @@ GitHub: [Download](https://github.com/hari161008/Ever-Call-Recorder/releases) �
 • 🎚️ Adjustable Recording Quality – Choose recording quality to balance clarity and storage usage<br><br>
 
 # The App Which I Used As The Base
-┈➤ [Cally](https://github.com/LyoSU/cally)
+┈➤ [Cally](https://github.com/kitsumed/ShizuCallRecorder)
