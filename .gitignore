@@ -1,31 +1,35 @@
-*.iml
-.gradle
-.kotlin/
-local.properties
-.idea/
+# Gradle files
+.gradle/
 build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+*.log
+
+# Android Studio generated files and folders
 captures/
-.externalNativeBuild
+.externalNativeBuild/
 .cxx/
-*.apk
 *.aab
-*.ap_
-*.dex
-.DS_Store
-keystore.properties
+*.apk
+output-metadata.json
+app/release/*
+
+# IntelliJ
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# Keystore files
 *.jks
 *.keystore
 
-# Local environment / secrets — must never be tracked.
-.env
-.env.*
-!.env.example
+# Android Profiling
+*.hprof
 
-# Local-only scratch / research / notes — not part of the published source.
-apk_extracted/
-notes/
-research/
-scratch/
-
-# Internal engineering doc — kept locally, not part of the public release.
-IMPLEMENTATION_GUIDE.md
+# Idk but I don't want to commit theses
+.kotlin/sessions/*

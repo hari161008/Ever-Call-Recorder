@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
-    url: https://github.com/LyoSU/cally/security/advisories/new
-    about: Не відкривайте публічний issue для security-проблем — використовуйте приватний звіт. Деталі у SECURITY.md.
-  - name: Питання щодо використання
-    url: https://github.com/LyoSU/cally/discussions
-    about: Як налаштувати, як це працює, чому не записує — це у Discussions, не в Issues.
+  - name: Community Support for ShizuCallRecorder
+    url: https://github.com/kitsumed/ShizuCallRecorder/discussions
+    about: Please ask and answer other users questions here. THIS IS NOT FOR BUG REPORTS.
+  - name: Community Support for Shizuku (thedjchi fork)
+    url: https://github.com/thedjchi/Shizuku/discussions/categories/q-a
+    about: Please ask and answer other users questions here. THIS IS NOT FOR BUG REPORTS.

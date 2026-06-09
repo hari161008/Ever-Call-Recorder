@@ -672,3 +672,25 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+--------------------------------------------------
+
+Additional Terms under GNU GPL version 3 Section 7
+
+As permitted by Section 7 of the GPLv3, the following Additional Terms are hereby incorporated into the license:
+
+1. Brand & Trademark Protection (Section 7, subsection e)
+This License does not grant any rights to use the trademarks, service marks, or logos of the Original Author (copyright holder) or any Contributor. Use of the project's branding is strictly prohibited without explicit written permission of the Original Author (copyright holder).
+
+2. App Store & Publicity Restrictions (Section 7, subsections d and e)
+You are not permitted to use the trademarks, name of the project, its authors, or its logos for publicity purposes, specifically in Google Play Store or other app store listings, unless granted explicit permission by the Original Author.
+
+3. Mandatory Distinction for Modified Versions (Section 7, subsection c)
+To prevent misrepresentation of the origin of the material, any modified version (fork) of this software must be clearly marked as different from the original. You must:
+* Rename the app: You may not use the name "ShizuCallRecorder" or any confusingly similar title.
+* Change the Package ID: You must change the unique identifier (e.g., do not use `com.kitsumed.shizucallrecorder`).
+* Disclose Fork Status: The software must prominently display a notice stating it is a FORK or EDITED CLONE of the original project.
+
+4. Attribution & Linking (Section 7, subsection b)
+Any modified version must include a clear, visible attribution to the original project within the user interface (e.g., an "About" screen). This attribution must include a link to the original project's repository:
+> *"This software is a fork of ShizuCallRecorder, available at [Original URL]."*

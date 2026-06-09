@@ -1,23 +1,39 @@
-# R8 shrinker rules. Inherits :userservice/consumer-rules.pro automatically;
-# this file holds app-specific keeps.
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# AIDL stubs are loaded by reflection (Stub.asInterface). Strip nothing.
--keep class dev.lyo.callrec.aidl.** { *; }
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# Shizuku reflectively touches its provider. Keep entry points.
--keep class rikka.shizuku.** { *; }
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# DataStore preferences key names are stable identifiers for migration.
--keepclassmembers class * extends androidx.datastore.preferences.core.Preferences { *; }
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile
 
-# Room: keep entity field names so generated DAOs can resolve column meta.
--keep class dev.lyo.callrec.storage.CallRecord { *; }
+# Prevent code obfuscation to keep the original class, method, and field names.
+-dontobfuscate
 
-# Compose lambda strip safety (inline classes for state) — handled by R8 7.x+
-# automatically; nothing custom needed.
+# Keep the original class and method names for debugging on release builds.
+-keepattributes LineNumberTable
+-keepattributes SourceFile
+-keepattributes Signature, InnerClasses, EnclosingMethod
 
-# Strip kotlinx-coroutines debug agent in release.
--dontwarn kotlinx.coroutines.debug.**
+# Strip all Log.v calls
+-assumenosideeffects class android.util.Log {
+  v(...);
+}
 
-# Suppress AndroidX lifecycle metadata noise.
--dontwarn javax.annotation.**
+# Also strip your our custom AppLogger verbose calls
+-assumenosideeffects class com.kitsumed.shizucallrecorder.utils.AppLogger {
+  v(...);
+}

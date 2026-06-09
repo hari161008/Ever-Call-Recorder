@@ -1,20 +1,116 @@
-import java.util.Properties
+/*
+ * ShizuCallRecorder: FOSS Call recording powered through ADB/Shizuku!
+ *  Copyright (C) 2026-present kitsumed (Med)
+ *  This software is licensed under the GNU General Public License v3 or later, with additional terms as permitted under Section 7.
+ *  The full license text is available in the LICENSE file at the root of this project.
+ *  This software is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ */
+
+import java.net.URI
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.aboutlibraries)
 }
 
-// Optional release signing. Drop a keystore.properties file (gitignored) at
-// the project root with: storeFile=, storePassword=, keyAlias=, keyPassword=,
-// signingSha256= (lowercase hex of the cert's SHA-256, without colons).
-val keystoreProps = Properties().apply {
-    val f = rootProject.file("keystore.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
+val scrcpyVersion = "4.0"
+val scrcpyServerUrl = "https://github.com/Genymobile/scrcpy/releases/download/v$scrcpyVersion/scrcpy-server-v$scrcpyVersion"
+val scrcpyServerSha256 = "84924bd564a1eb6089c872c7521f968058977f91f5ff02514a8c74aff3210f3a"
+val scrcpyServerAssetName = "scrcpy-server"
+val scrcpyDownloadDir = layout.buildDirectory.dir("generated/scrcpy/assets")
+val scrcpyServerAssetFile = scrcpyDownloadDir.map { it.file(scrcpyServerAssetName) }
+val libphonenumberMetadataDir = layout.buildDirectory.dir("generated/libphonenumber/assets")
+
+// Detect if we're running in a CI environment (e.g., GitHub Actions).
+val isEnvironmentGithubCI = providers.environmentVariable("GITHUB_ACTIONS").isPresent
+
+abstract class DownloadAssetTask : DefaultTask() {
+    @get:Input
+    abstract val url: Property<String>
+
+    @get:Input
+    abstract val sha256: Property<String>
+
+    @get:Input
+    abstract val assetName: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun download() {
+        val targetFile = outputDir.get().file(assetName.get()).asFile
+
+        // Internal check to skip if already correct
+        if (targetFile.exists() && calculateSha256(targetFile).equals(sha256.get(), ignoreCase = true)) {
+            println("${assetName.get()} is already up-to-date.")
+            return
+        }
+
+        targetFile.parentFile.mkdirs()
+        println("Downloading ${assetName.get()}...")
+
+        URI(url.get()).toURL().openStream().use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        val actualHash = calculateSha256(targetFile)
+        if (!actualHash.equals(sha256.get(), ignoreCase = true)) {
+            targetFile.delete()
+            throw GradleException("SHA256 mismatch! Expected ${sha256.get()} but got $actualHash")
+        }
+    }
+
+    private fun calculateSha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead = input.read(buffer)
+            while (bytesRead != -1) {
+                digest.update(buffer, 0, bytesRead)
+                bytesRead = input.read(buffer)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 }
+abstract class ExtractMetadataTask : Sync() {
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+}
+
+val downloadScrcpyServer = tasks.register<DownloadAssetTask>("downloadScrcpyServer") {
+    url.set(scrcpyServerUrl)
+    sha256.set(scrcpyServerSha256)
+    assetName.set(scrcpyServerAssetName)
+    outputDir.set(scrcpyDownloadDir)
+}
+
+val extractLibphonenumberMetadata = tasks.register<ExtractMetadataTask>("extractLibphonenumberMetadata") {
+    val lib = libs.libphonenumber.get()
+    val jarFile = project.configurations
+        .detachedConfiguration(project.dependencies.create(lib))
+        .singleFile
+
+    from(zipTree(jarFile)) {
+        include("com/google/i18n/phonenumbers/data/**")
+        eachFile {
+            relativePath = RelativePath(true, "phonenumber_data", name)
+        }
+        includeEmptyDirs = false
+    }
+    outputDir.set(libphonenumberMetadataDir)
+    into(outputDir)
+}
+
+val ciVersionCode = providers.gradleProperty("versionCode").map { it.toIntOrNull() }.orElse(2)
+val ciVersionName = providers.gradleProperty("versionName").orElse("2.0.0")
+val ciBuildNumber = providers.gradleProperty("ciBuildNumber").orElse("Local")
 
 android {
     namespace = "com.coolappstore.evercallrecorder.by.svhp"
@@ -22,137 +118,139 @@ android {
 
     defaultConfig {
         applicationId = "com.coolappstore.evercallrecorder.by.svhp"
-        minSdk = 31
+        minSdk = 30
         targetSdk = 36
-        versionCode = 7
-        versionName = "2.0.0"
+        versionCode = ciVersionCode.get()
+        versionName = ciVersionName.get()
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables.useSupportLibrary = true
+        buildConfigField("String", "CI_BUILD_NUMBER", "\"${ciBuildNumber.get()}\"")
+
+        buildConfigField("String", "SCRCPY_VERSION", "\"$scrcpyVersion\"")
+        buildConfigField("String", "SCRCPY_SERVER_SHA256", "\"$scrcpyServerSha256\"")
+        buildConfigField("String", "SCRCPY_SERVER_ASSET_NAME", "\"$scrcpyServerAssetName\"")
     }
-
     signingConfigs {
-        if (keystoreProps.containsKey("storeFile")) {
-            create("release") {
-                storeFile = file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+        // Signing config for CI environments.
+        create("ci-release") {
+            if (isEnvironmentGithubCI) {
+                storeFile = file(System.getenv("KEYSTORE_FILE") ?: throw GradleException("Keystore file not provided for release signing. env variable: KEYSTORE_FILE"))
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: throw GradleException("Keystore password not provided for release signing. env variable: KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS") ?: throw GradleException("Key alias not provided for release signing. env variable: KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD") ?:throw GradleException("Key password not provided for release signing. env variable: KEY_PASSWORD")
+
             }
         }
     }
-
     buildTypes {
-        debug {
-            isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            if (isEnvironmentGithubCI) {
+                println("Configuring release build for CI environment. Official release signing keys will be used.")
+                signingConfig = signingConfigs.getByName("ci-release")
+            }
         }
     }
-
+    compileOptions {
+        sourceCompatibility =  JavaVersion.VERSION_17
+        targetCompatibility =  JavaVersion.VERSION_17
+    }
     buildFeatures {
         compose = true
+        aidl = true
         buildConfig = true
-        aidl = false // AIDL lives in the :aidl module
     }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-        isCoreLibraryDesugaringEnabled = false
-    }
-
-    kotlin {
-        jvmToolchain(21)
-        compilerOptions {
-            freeCompilerArgs.addAll(
-                "-Xjvm-default=all",
-                "-Xcontext-receivers",
-                "-opt-in=kotlin.RequiresOptIn",
-                "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
-                "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-            )
-        }
-    }
-
     packaging {
-        resources {
-            excludes += setOf(
-                "/META-INF/{AL2.0,LGPL2.1}",
-                "/META-INF/INDEX.LIST",
-                "/META-INF/DEPENDENCIES",
-                "/META-INF/io.netty.versions.properties",
-            )
-        }
+        // Exclude the original metadata from libphonenumber to avoid conflicts with our extracted version. This ensures only our processed assets are included in the final APK.
+        resources.excludes.add("com/google/i18n/phonenumbers/data/**")
     }
-
-    testOptions {
-        unitTests {
-            isReturnDefaultValues = true
-        }
+    androidResources {
+        generateLocaleConfig = true
     }
+}
 
-    lint {
-        warningsAsErrors = false
-        abortOnError = true
-        // ObsoleteSdkInt: the adaptive-icon mipmap-anydpi-v26 qualifier is
-        // technically obsolete at minSdk=31, but AAPT2 still resolves icons
-        // through it for adaptive XML resources — dropping the qualifier
-        // breaks resource linking. Suppress the warning rather than the
-        // resource directory.
-        disable += setOf("MissingTranslation", "ExtraTranslation", "ObsoleteSdkInt")
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            downloadScrcpyServer,
+            DownloadAssetTask::outputDir
+        )
+
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            extractLibphonenumberMetadata,
+            ExtractMetadataTask::outputDir
+        )
+    }
+}
+
+aboutLibraries {
+    // Gradle sync runs in the Task :app:prepareLibraryDefinitionsDebug and :app:prepareLibraryDefinitionsRelease.
+    collect {
+        // Define the path configuration files are located in. E.g. additional libraries, licenses to add to the target .json
+        // Warning: Please do not use the parent folder of a module as path, as this can result in issues. More details: https://github.com/mikepenz/AboutLibraries/issues/936
+        // The path provided is relative to the modules path (not project root)
+        configPath = file("../aboutLibrariesConfig")
+
+        // Enable fetching of "remote" licenses.  Uses the API of supported source hosts
+        // See https://github.com/mikepenz/AboutLibraries#special-repository-support
+        // A `gitHubApiToken` is required for this to work as it fetches information from GitHub's API.
+        fetchRemoteLicense = false
+
+        // Enables fetching of "remote" funding information. Uses the API of supported source hosts
+        // See https://github.com/mikepenz/AboutLibraries#special-repository-support
+        // A `gitHubApiToken` is required for this to work as it fetches information from GitHub's API.
+        fetchRemoteFunding = false
+
+    }
+    library {
+        // Enable the duplication mode, allows to merge, or link dependencies which relate
+        duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
+        // Configure the duplication rule, to match "duplicates" with
+        // We merge when groupId and license are equal
+        duplicationRule = com.mikepenz.aboutlibraries.plugin.DuplicateRule.GROUP
     }
 }
 
 dependencies {
-    implementation(project(":aidl"))
-    implementation(project(":userservice"))
+    // AndroidX Core & Lifecycle
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.appcompat)
 
-    // AndroidX core
-    implementation(libs.androidx.core)
+    // Compose Core
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.splashscreen)
-    implementation(libs.androidx.media)
-    implementation(libs.bundles.lifecycle)
-    implementation(libs.androidx.lifecycle.service)
-    implementation(libs.androidx.lifecycle.process)
-    implementation(libs.androidx.navigation.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
-    // Compose
-    implementation(platform(libs.compose.bom))
-    androidTestImplementation(platform(libs.compose.bom))
-    implementation(libs.bundles.compose)
-    debugImplementation(libs.compose.ui.tooling)
+    // Compose Tooling
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // Persistence
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-    implementation(libs.datastore.preferences)
+    // AboutLibraries
+    implementation(libs.aboutlibraries.core)
+    implementation(libs.aboutlibraries.compose.m3)
 
-    // Coroutines + serialization
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.serialization.json)
+    // Libphonenumber
+    implementation(libs.libphonenumber)
 
-    // Shizuku — privileged binding
-    implementation(libs.shizuku.api)
-    implementation(libs.shizuku.provider)
-
-    // Unit tests
-    testImplementation(libs.junit)
-    testImplementation(libs.truth)
-    testImplementation(libs.kotlinx.coroutines.test)
-
-    // Instrumentation
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.espresso.core)
+    // Shizuku
+    implementation(libs.shizukuApi)
+    implementation(libs.shizukuProvider)
 }
