@@ -3,11 +3,15 @@ package com.coolappstore.evercallrecorder.by.svhp
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -25,29 +29,27 @@ import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.SettingsViewModel
 
 private enum class AppScreen { Disclaimer, Permissions, Home }
+private enum class SubScreen(val depth: Int) { None(0), Settings(1), Playback(1) }
 
-private enum class SubScreen(val stackDepth: Int) {
-    None(0), Settings(1), Playback(1)
-}
+private val RevealEasing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1f)
+private const val DURATION_IN = 420
+private const val DURATION_OUT = 280
 
-private val SlowEasing: Easing = CubicBezierEasing(0.25f, 0.46f, 0.45f, 0.94f)
-private const val TRANSITION_MS = 480
+private fun enterTransition() =
+    fadeIn(tween(DURATION_IN, easing = RevealEasing)) +
+    scaleIn(tween(DURATION_IN, easing = RevealEasing), initialScale = 0.94f)
 
-private fun pushEnter() = (slideIn(
-    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
-) { IntOffset(it.width / 2, 0) } + fadeIn(tween(TRANSITION_MS, easing = SlowEasing)))
+private fun exitTransition() =
+    fadeOut(tween(DURATION_OUT, easing = RevealEasing)) +
+    scaleOut(tween(DURATION_OUT, easing = RevealEasing), targetScale = 0.97f)
 
-private fun pushExit() = (slideOut(
-    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
-) { IntOffset(-it.width / 4, 0) } + fadeOut(tween(TRANSITION_MS / 2, easing = SlowEasing)))
+private fun popEnterTransition() =
+    fadeIn(tween(DURATION_IN, easing = RevealEasing)) +
+    scaleIn(tween(DURATION_IN, easing = RevealEasing), initialScale = 0.97f)
 
-private fun popEnter() = (slideIn(
-    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
-) { IntOffset(-it.width / 4, 0) } + fadeIn(tween(TRANSITION_MS, easing = SlowEasing)))
-
-private fun popExit() = (slideOut(
-    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
-) { IntOffset(it.width / 2, 0) } + fadeOut(tween(TRANSITION_MS / 2, easing = SlowEasing)))
+private fun popExitTransition() =
+    fadeOut(tween(DURATION_OUT, easing = RevealEasing)) +
+    scaleOut(tween(DURATION_OUT, easing = RevealEasing), targetScale = 0.94f)
 
 @Composable
 fun AppNavigationScreen() {
@@ -61,7 +63,6 @@ fun AppNavigationScreen() {
 
     var subScreen by rememberSaveable { mutableStateOf(SubScreen.None) }
     var selectedRecording by remember { mutableStateOf<RecordingItem?>(null) }
-    var prevDepth by remember { mutableIntStateOf(0) }
 
     val goBack: () -> Unit = { subScreen = SubScreen.None }
 
@@ -88,54 +89,66 @@ fun AppNavigationScreen() {
     }
 
     ShizucallrecorderTheme(darkTheme = darkTheme) {
-        val screen = resolveScreen(onboardingStatus)
+        // Solid background behind ALL transitions — prevents any dark flicker
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            BackHandler(enabled = subScreen != SubScreen.None) { goBack() }
 
-        // Intercept hardware/gesture back on sub-screens
-        BackHandler(enabled = subScreen != SubScreen.None) { goBack() }
+            val screen = resolveScreen(onboardingStatus)
+            when (screen) {
+                AppScreen.Disclaimer -> DisclaimerScreen(
+                    onContinue = {
+                        preferences.setDisclaimerAccepted(true)
+                        appNavViewModel.refresh()
+                    }
+                )
+                AppScreen.Permissions -> PermissionsScreen(
+                    status = onboardingStatus,
+                    onPermissionGranted = { appNavViewModel.refresh() }
+                )
+                AppScreen.Home -> {
+                    var prevDepth by remember { mutableIntStateOf(0) }
 
-        when (screen) {
-            AppScreen.Disclaimer -> DisclaimerScreen(
-                onContinue = {
-                    preferences.setDisclaimerAccepted(true)
-                    appNavViewModel.refresh()
-                }
-            )
-            AppScreen.Permissions -> PermissionsScreen(
-                status = onboardingStatus,
-                onPermissionGranted = { appNavViewModel.refresh() }
-            )
-            AppScreen.Home -> {
-                val isPush = subScreen.stackDepth >= prevDepth
-                LaunchedEffect(subScreen) { prevDepth = subScreen.stackDepth }
-
-                AnimatedContent(
-                    targetState = subScreen,
-                    transitionSpec = {
-                        val entering = targetState.stackDepth >= initialState.stackDepth
-                        if (entering) pushEnter() togetherWith pushExit()
-                        else popEnter() togetherWith popExit()
-                    },
-                    label = "SubScreenTransition"
-                ) { target ->
-                    when (target) {
-                        SubScreen.Settings -> SettingsScreen(
-                            viewModel = settingsViewModel,
-                            onBack = goBack
-                        )
-                        SubScreen.Playback -> {
-                            val rec = selectedRecording
-                            if (rec != null) {
-                                PlaybackScreen(recording = rec, onBack = goBack)
+                    AnimatedContent(
+                        targetState = subScreen,
+                        transitionSpec = {
+                            val pushing = targetState.depth >= initialState.depth
+                            if (pushing)
+                                enterTransition() togetherWith exitTransition()
+                            else
+                                popEnterTransition() togetherWith popExitTransition()
+                        },
+                        label = "SubScreen"
+                    ) { target ->
+                        // Background behind each screen so nothing bleeds through
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background)
+                        ) {
+                            when (target) {
+                                SubScreen.Settings -> SettingsScreen(
+                                    viewModel = settingsViewModel,
+                                    onBack = goBack
+                                )
+                                SubScreen.Playback -> {
+                                    val rec = selectedRecording
+                                    if (rec != null) PlaybackScreen(recording = rec, onBack = goBack)
+                                }
+                                SubScreen.None -> HomeScreen(
+                                    appVersion = settingsViewModel.getAppVersion(),
+                                    onSettingsClick = { subScreen = SubScreen.Settings },
+                                    onRecordingClick = { recording ->
+                                        selectedRecording = recording
+                                        subScreen = SubScreen.Playback
+                                    }
+                                )
                             }
                         }
-                        SubScreen.None -> HomeScreen(
-                            appVersion = settingsViewModel.getAppVersion(),
-                            onSettingsClick = { subScreen = SubScreen.Settings },
-                            onRecordingClick = { recording ->
-                                selectedRecording = recording
-                                subScreen = SubScreen.Playback
-                            }
-                        )
+                        LaunchedEffect(target) { prevDepth = target.depth }
                     }
                 }
             }

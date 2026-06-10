@@ -23,6 +23,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.*
 import java.text.SimpleDateFormat
@@ -42,6 +45,16 @@ fun HomeScreen(
     val query by vm.searchQuery.collectAsState()
     val filterTab by vm.filterTab.collectAsState()
     val sortConfig by vm.sortConfig.collectAsState()
+
+    // Refresh list every time this screen becomes visible (after a call ends)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),

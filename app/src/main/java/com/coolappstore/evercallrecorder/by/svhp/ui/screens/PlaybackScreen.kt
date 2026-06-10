@@ -82,12 +82,7 @@ fun PlaybackScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // ── Call info card ────────────────────────────────────────────────
-            var visible by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) { visible = true }
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(400, easing = FastOutSlowInEasing)) + slideInVertically(tween(400, easing = FastOutSlowInEasing)) { it / 4 }
-            ) { Card(
+                Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
@@ -162,13 +157,10 @@ fun PlaybackScreen(
                         }
                     }
                 }
-            } }
+            }
 
             // ── Player card ───────────────────────────────────────────────────
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(460, delayMillis = 80, easing = FastOutSlowInEasing)) + slideInVertically(tween(460, delayMillis = 80, easing = FastOutSlowInEasing)) { it / 4 }
-            ) { Card(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
@@ -276,13 +268,10 @@ fun PlaybackScreen(
                         }
                     }
                 }
-            } }
+            }
 
             // ── Notes card ────────────────────────────────────────────────────
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(520, delayMillis = 160, easing = FastOutSlowInEasing)) + slideInVertically(tween(520, delayMillis = 160, easing = FastOutSlowInEasing)) { it / 4 }
-            ) { Card(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
@@ -335,7 +324,7 @@ fun PlaybackScreen(
                         )
                     )
                 }
-            } }
+            }
 
             Spacer(Modifier.height(8.dp))
         }

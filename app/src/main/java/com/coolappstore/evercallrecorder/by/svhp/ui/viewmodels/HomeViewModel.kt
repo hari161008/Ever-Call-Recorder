@@ -8,6 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
+import com.coolappstore.evercallrecorder.by.svhp.system.permissions.PermissionChecks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,13 +47,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val notesPrefs = application.getSharedPreferences("recording_notes", Context.MODE_PRIVATE)
 
     private val _allRecordings = MutableStateFlow<List<RecordingItem>>(emptyList())
-    private val _isLoading = MutableStateFlow(true)
+    private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
     val sortConfig = MutableStateFlow(SortConfig())
     val filterTab = MutableStateFlow(FilterTab.ALL)
     val searchQuery = MutableStateFlow("")
     val recordings = MutableStateFlow<List<RecordingItem>>(emptyList())
+
+    // Date formats the app can produce
+    private val dateFormats = listOf(
+        SimpleDateFormat("yyyyMMdd_HHmmss.SSSZ", Locale.CANADA),
+        SimpleDateFormat("yyyyMMdd_HHmmss", Locale.CANADA)
+    )
 
     init {
         loadRecordings()
@@ -61,16 +68,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { searchQuery.collect { applyFilters() } }
     }
 
-    fun refresh() = loadRecordings()
+    fun refresh() {
+        if (!_isLoading.value) loadRecordings()
+    }
 
     fun toggleFavourite(item: RecordingItem) {
         val key = item.uri.toString()
         val isFav = favPrefs.getBoolean(key, false)
         favPrefs.edit().putBoolean(key, !isFav).apply()
-        val updated = _allRecordings.value.map {
+        _allRecordings.value = _allRecordings.value.map {
             if (it.uri == item.uri) it.copy(isFavourite = !isFav) else it
         }
-        _allRecordings.value = updated
         applyFilters()
     }
 
@@ -114,24 +122,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val folderUri = preferences.getRecordingFolderUri() ?: return@withContext emptyList()
         val directory = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
         if (!directory.exists() || !directory.canRead()) return@withContext emptyList()
-        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.CANADA)
+        val hasContacts = PermissionChecks.hasContactsPermission(context)
+
         directory.listFiles()
             .filter { it.isFile && it.name != null }
             .mapNotNull { file ->
                 val name = file.name ?: return@mapNotNull null
                 val ext = name.substringAfterLast('.', "")
+                // Strip extension for parsing
                 val baseName = name.substringBeforeLast('.')
+                // Format: {date}_{direction}_{phone_number}
+                // date = yyyyMMdd_HHmmss.SSSZ  → parts[0]_parts[1]
+                // direction = parts[2]  (in/out)
+                // phone = parts[3..] joined (numbers with + or - don't contain _)
                 val parts = baseName.split("_")
-                val direction = parts.getOrNull(2) ?: ""
-                val phoneNumber = parts.drop(3).joinToString("_").ifBlank { parts.getOrNull(3) ?: "" }
-                val dateStr = if (parts.size >= 2) "${parts[0]}_${parts[1]}" else ""
-                val date = try { dateFormat.parse(dateStr) } catch (_: Exception) { null }
-                val number = phoneNumber.ifBlank { "Unknown" }
-                val contactName = resolveContactName(context, number)
+                val direction = if (parts.size >= 3) parts[2] else ""
+                // Phone number: everything after direction token
+                val phoneRaw = if (parts.size >= 4) parts.drop(3).joinToString("_") else ""
+                // Date: first two tokens
+                val dateRaw = if (parts.size >= 2) "${parts[0]}_${parts[1]}" else ""
+                val date = parseDate(dateRaw)
+                val phoneNumber = phoneRaw.trim().ifBlank { "Unknown" }
+                val contactName = if (hasContacts && phoneNumber != "Unknown")
+                    resolveContactName(context, phoneNumber) else null
+
                 RecordingItem(
                     uri = file.uri,
                     displayName = name,
-                    phoneNumber = number,
+                    phoneNumber = phoneNumber,
                     contactName = contactName,
                     direction = direction,
                     date = date,
@@ -142,6 +160,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
     }
 
+    private fun parseDate(raw: String): Date? {
+        for (fmt in dateFormats) {
+            try { return fmt.parse(raw) } catch (_: Exception) {}
+        }
+        return null
+    }
+
     private fun resolveContactName(context: Context, phoneNumber: String): String? {
         return try {
             val uri = Uri.withAppendedPath(
@@ -149,7 +174,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 Uri.encode(phoneNumber)
             )
             context.contentResolver.query(
-                uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null
+                uri,
+                arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null, null, null
             )?.use { cursor ->
                 if (cursor.moveToFirst())
                     cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.PhoneLookup.DISPLAY_NAME))
