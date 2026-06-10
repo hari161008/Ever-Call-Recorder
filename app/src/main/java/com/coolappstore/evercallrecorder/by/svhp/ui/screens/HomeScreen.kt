@@ -323,12 +323,12 @@ private enum class SortOption(
     val order: SortOrder,
     val icon: ImageVector
 ) {
-    TIME_ASC("Time — Oldest first", SortField.TIME, SortOrder.ASC, Icons.Rounded.ArrowUpward),
     TIME_DESC("Time — Newest first", SortField.TIME, SortOrder.DESC, Icons.Rounded.ArrowDownward),
-    DATE_ASC("Date — Ascending", SortField.DATE, SortOrder.ASC, Icons.Rounded.ArrowUpward),
-    DATE_DESC("Date — Descending", SortField.DATE, SortOrder.DESC, Icons.Rounded.ArrowDownward),
-    NAME_ASC("Name — A to Z", SortField.NAME, SortOrder.ASC, Icons.Rounded.ArrowUpward),
-    NAME_DESC("Name — Z to A", SortField.NAME, SortOrder.DESC, Icons.Rounded.ArrowDownward),
+    TIME_ASC("Time — Oldest first",  SortField.TIME, SortOrder.ASC,  Icons.Rounded.ArrowUpward),
+    DATE_DESC("Date — Descending",   SortField.DATE, SortOrder.DESC, Icons.Rounded.ArrowDownward),
+    DATE_ASC("Date — Ascending",     SortField.DATE, SortOrder.ASC,  Icons.Rounded.ArrowUpward),
+    NAME_ASC("Name — A to Z",        SortField.NAME, SortOrder.ASC,  Icons.Rounded.ArrowUpward),
+    NAME_DESC("Name — Z to A",       SortField.NAME, SortOrder.DESC, Icons.Rounded.ArrowDownward),
 }
 
 // ── Date group header ─────────────────────────────────────────────────────────
