@@ -1,28 +1,53 @@
 package com.coolappstore.evercallrecorder.by.svhp
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.platform.LocalContext
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
 import com.coolappstore.evercallrecorder.by.svhp.onboarding.OnboardingStatus
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.DisclaimerScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.HomeScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PermissionsScreen
+import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PlaybackScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.SettingsScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.theme.ShizucallrecorderTheme
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.AppNavigationViewModel
+import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.SettingsViewModel
+
+private enum class AppScreen { Disclaimer, Permissions, Home }
+
+private enum class SubScreen(val stackDepth: Int) {
+    None(0), Settings(1), Playback(1)
+}
+
+private val SlowEasing: Easing = CubicBezierEasing(0.25f, 0.46f, 0.45f, 0.94f)
+private const val TRANSITION_MS = 480
+
+private fun pushEnter() = (slideIn(
+    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
+) { IntOffset(it.width / 2, 0) } + fadeIn(tween(TRANSITION_MS, easing = SlowEasing)))
+
+private fun pushExit() = (slideOut(
+    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
+) { IntOffset(-it.width / 4, 0) } + fadeOut(tween(TRANSITION_MS / 2, easing = SlowEasing)))
+
+private fun popEnter() = (slideIn(
+    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
+) { IntOffset(-it.width / 4, 0) } + fadeIn(tween(TRANSITION_MS, easing = SlowEasing)))
+
+private fun popExit() = (slideOut(
+    animationSpec = tween(TRANSITION_MS, easing = SlowEasing)
+) { IntOffset(it.width / 2, 0) } + fadeOut(tween(TRANSITION_MS / 2, easing = SlowEasing)))
 
 @Composable
 fun AppNavigationScreen() {
@@ -31,20 +56,19 @@ fun AppNavigationScreen() {
     val appNavViewModel: AppNavigationViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
     val onboardingStatus by appNavViewModel.onboardingStatus.collectAsState()
-    val settingsViewModelUpdateTrigger by settingsViewModel.updateTrigger.collectAsState()
+    val settingsUpdateTrigger by settingsViewModel.updateTrigger.collectAsState()
     val preferences = settingsViewModel.preferences
 
-    // Tracks whether the Settings sub-screen is open on top of Home
-    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var subScreen by rememberSaveable { mutableStateOf(SubScreen.None) }
+    var selectedRecording by remember { mutableStateOf<RecordingItem?>(null) }
+    var prevDepth by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(settingsViewModelUpdateTrigger) {
+    val goBack: () -> Unit = { subScreen = SubScreen.None }
+
+    LaunchedEffect(settingsUpdateTrigger) {
         val newStatus = OnboardingStatus.getStatus(activityContext, preferences)
-        if (newStatus != onboardingStatus) {
-            appNavViewModel.refresh()
-        }
+        if (newStatus != onboardingStatus) appNavViewModel.refresh()
     }
-
-    val screenState = resolveScreen(onboardingStatus)
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -62,10 +86,14 @@ fun AppNavigationScreen() {
         AppPreferences.ThemeMode.DARK  -> true
         AppPreferences.ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
-    val dynamicColor = preferences.isDynamicColorEnabled()
 
-    ShizucallrecorderTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
-        when (screenState) {
+    ShizucallrecorderTheme(darkTheme = darkTheme) {
+        val screen = resolveScreen(onboardingStatus)
+
+        // Intercept hardware/gesture back on sub-screens
+        BackHandler(enabled = subScreen != SubScreen.None) { goBack() }
+
+        when (screen) {
             AppScreen.Disclaimer -> DisclaimerScreen(
                 onContinue = {
                     preferences.setDisclaimerAccepted(true)
@@ -73,32 +101,50 @@ fun AppNavigationScreen() {
                 }
             )
             AppScreen.Permissions -> PermissionsScreen(
-                status              = onboardingStatus,
+                status = onboardingStatus,
                 onPermissionGranted = { appNavViewModel.refresh() }
             )
             AppScreen.Home -> {
-                if (showSettings) {
-                    SettingsScreen(
-                        viewModel = settingsViewModel,
-                        onBack = { showSettings = false }
-                    )
-                } else {
-                    HomeScreen(
-                        appVersion = settingsViewModel.getAppVersion(),
-                        onSettingsClick = { showSettings = true }
-                    )
+                val isPush = subScreen.stackDepth >= prevDepth
+                LaunchedEffect(subScreen) { prevDepth = subScreen.stackDepth }
+
+                AnimatedContent(
+                    targetState = subScreen,
+                    transitionSpec = {
+                        val entering = targetState.stackDepth >= initialState.stackDepth
+                        if (entering) pushEnter() togetherWith pushExit()
+                        else popEnter() togetherWith popExit()
+                    },
+                    label = "SubScreenTransition"
+                ) { target ->
+                    when (target) {
+                        SubScreen.Settings -> SettingsScreen(
+                            viewModel = settingsViewModel,
+                            onBack = goBack
+                        )
+                        SubScreen.Playback -> {
+                            val rec = selectedRecording
+                            if (rec != null) {
+                                PlaybackScreen(recording = rec, onBack = goBack)
+                            }
+                        }
+                        SubScreen.None -> HomeScreen(
+                            appVersion = settingsViewModel.getAppVersion(),
+                            onSettingsClick = { subScreen = SubScreen.Settings },
+                            onRecordingClick = { recording ->
+                                selectedRecording = recording
+                                subScreen = SubScreen.Playback
+                            }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private enum class AppScreen { Disclaimer, Permissions, Home }
-
-private fun resolveScreen(status: OnboardingStatus.Status): AppScreen {
-    return when {
-        !status.disclaimerAccepted -> AppScreen.Disclaimer
-        !status.isComplete()       -> AppScreen.Permissions
-        else                       -> AppScreen.Home
-    }
+private fun resolveScreen(status: OnboardingStatus.Status): AppScreen = when {
+    !status.disclaimerAccepted -> AppScreen.Disclaimer
+    !status.isComplete()       -> AppScreen.Permissions
+    else                       -> AppScreen.Home
 }

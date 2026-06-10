@@ -1,140 +1,551 @@
 package com.coolappstore.evercallrecorder.by.svhp.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.coolappstore.evercallrecorder.by.svhp.system.openGithub
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     appVersion: String,
     onSettingsClick: () -> Unit,
+    onRecordingClick: (com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
+    val vm: HomeViewModel = viewModel()
+    val recordings by vm.recordings.collectAsState()
+    val isLoading by vm.isLoading.collectAsState()
+    val query by vm.searchQuery.collectAsState()
+    val filterTab by vm.filterTab.collectAsState()
+    val sortConfig by vm.sortConfig.collectAsState()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Ever Call Recorder", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Call Recordings", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = "Settings"
-                        )
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Column(
+
+        // Group recordings by date label
+        val grouped: Map<String, List<com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem>> = remember(recordings) {
+            recordings.groupBy { groupLabel(it.date) }
+        }
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            Spacer(Modifier.height(32.dp))
+            // ── Search bar ────────────────────────────────────────────────────
+            item {
+                SearchBar(
+                    query = query,
+                    onQueryChange = { vm.searchQuery.value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
 
-            // App icon badge
-            val primary = MaterialTheme.colorScheme.primary
-            val tertiary = MaterialTheme.colorScheme.tertiary
+            // ── Filter/Sort pills ─────────────────────────────────────────────
+            item {
+                FilterPillRow(
+                    filterTab = filterTab,
+                    sortConfig = sortConfig,
+                    onFilterChange = { vm.filterTab.value = it },
+                    onSortChange = { vm.sortConfig.value = it },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
+            // ── Content ───────────────────────────────────────────────────────
+            when {
+                isLoading -> item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(240.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                recordings.isEmpty() -> item {
+                    EmptyState(
+                        isFavourites = filterTab == FilterTab.FAVOURITES,
+                        hasQuery = query.isNotBlank()
+                    )
+                }
+                else -> {
+                    grouped.forEach { (dateLabel, items) ->
+                        item(key = "header_$dateLabel") {
+                            DateGroupHeader(label = dateLabel, modifier = Modifier.animateItem(fadeInSpec = tween(340), placementSpec = spring(stiffness = Spring.StiffnessLow), fadeOutSpec = tween(220)))
+                        }
+                        item(key = "group_$dateLabel") {
+                            RecordingGroupCard(
+                                items = items,
+                                onFavouriteToggle = { vm.toggleFavourite(it) },
+                                onRecordingClick = onRecordingClick,
+                                modifier = Modifier.animateItem(fadeInSpec = tween(380, easing = FastOutSlowInEasing), placementSpec = spring(stiffness = Spring.StiffnessLow), fadeOutSpec = tween(240))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Search bar ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier,
+        placeholder = { Text("Search recordings…", style = MaterialTheme.typography.bodyMedium) },
+        leadingIcon = {
+            Icon(Icons.Outlined.Search, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Clear",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    )
+}
+
+// ── Filter + Sort pills ────────────────────────────────────────────────────────
+
+@Composable
+private fun FilterPillRow(
+    filterTab: FilterTab,
+    sortConfig: SortConfig,
+    onFilterChange: (FilterTab) -> Unit,
+    onSortChange: (SortConfig) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // All pill
+        FilterPill(
+            label = "All",
+            selected = filterTab == FilterTab.ALL,
+            icon = Icons.Rounded.List,
+            onClick = { onFilterChange(FilterTab.ALL) }
+        )
+
+        // Favourites pill
+        FilterPill(
+            label = "Favourites",
+            selected = filterTab == FilterTab.FAVOURITES,
+            icon = if (filterTab == FilterTab.FAVOURITES) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
+            onClick = { onFilterChange(FilterTab.FAVOURITES) }
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        // Sort pill + dropdown
+        Box {
+            val sortLabel = when (sortConfig.field) {
+                SortField.DATE -> "Date"
+                SortField.NAME -> "Name"
+                SortField.TIME -> "Time"
+            }
+            val sortIcon: ImageVector = if (sortConfig.order == SortOrder.ASC)
+                Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward
+
+            FilterPill(
+                label = sortLabel,
+                selected = true,
+                icon = sortIcon,
+                trailingIcon = Icons.Rounded.UnfoldMore,
+                onClick = { sortMenuExpanded = true }
+            )
+
+            DropdownMenu(
+                expanded = sortMenuExpanded,
+                onDismissRequest = { sortMenuExpanded = false },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                SortOption.entries.forEach { option ->
+                    val isSelected = sortConfig.field == option.field && sortConfig.order == option.order
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                option.label,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                option.icon,
+                                contentDescription = null,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSortChange(SortConfig(field = option.field, order = option.order))
+                            sortMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterPill(
+    label: String,
+    selected: Boolean,
+    icon: ImageVector,
+    trailingIcon: ImageVector? = null,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected)
+        MaterialTheme.colorScheme.secondaryContainer
+    else
+        MaterialTheme.colorScheme.surfaceContainerLow
+    val contentColor = if (selected)
+        MaterialTheme.colorScheme.onSecondaryContainer
+    else
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+            if (trailingIcon != null) {
+                Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
+// ── Sort options enum ──────────────────────────────────────────────────────────
+
+private enum class SortOption(
+    val label: String,
+    val field: SortField,
+    val order: SortOrder,
+    val icon: ImageVector
+) {
+    TIME_ASC("Time — Oldest first", SortField.TIME, SortOrder.ASC, Icons.Rounded.ArrowUpward),
+    TIME_DESC("Time — Newest first", SortField.TIME, SortOrder.DESC, Icons.Rounded.ArrowDownward),
+    DATE_ASC("Date — Ascending", SortField.DATE, SortOrder.ASC, Icons.Rounded.ArrowUpward),
+    DATE_DESC("Date — Descending", SortField.DATE, SortOrder.DESC, Icons.Rounded.ArrowDownward),
+    NAME_ASC("Name — A to Z", SortField.NAME, SortOrder.ASC, Icons.Rounded.ArrowUpward),
+    NAME_DESC("Name — Z to A", SortField.NAME, SortOrder.DESC, Icons.Rounded.ArrowDownward),
+}
+
+// ── Date group header ─────────────────────────────────────────────────────────
+
+@Composable
+private fun DateGroupHeader(label: String, modifier: Modifier = Modifier) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp)
+    )
+}
+
+// ── Recording group card ──────────────────────────────────────────────────────
+
+@Composable
+private fun RecordingGroupCard(
+    items: List<com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem>,
+    onFavouriteToggle: (com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem) -> Unit,
+    onRecordingClick: (com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            items.forEachIndexed { index, item ->
+                RecordingRow(item = item, onFavouriteToggle = { onFavouriteToggle(item) }, onClick = { onRecordingClick(item) })
+                if (index < items.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Single recording row ──────────────────────────────────────────────────────
+
+@Composable
+private fun RecordingRow(
+    item: com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem,
+    onFavouriteToggle: () -> Unit,
+    onClick: () -> Unit
+) {
+    val isIncoming = item.direction == "in"
+    val accentColor = if (isIncoming)
+        MaterialTheme.colorScheme.primary
+    else
+        MaterialTheme.colorScheme.tertiary
+    val directionIcon = if (isIncoming) Icons.Rounded.CallReceived else Icons.Rounded.CallMade
+    val directionLabel = if (isIncoming) "Incoming" else "Outgoing"
+    val timeStr = item.date?.let {
+        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it)
+    } ?: ""
+
+    ListItem(
+        modifier = Modifier.clickable { onClick() },
+        leadingContent = {
             Box(
                 modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Brush.linearGradient(listOf(primary, tertiary))),
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Mic,
+                    imageVector = directionIcon,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(52.dp)
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
                 )
             }
-
-            // App name + version
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+        },
+        headlineContent = {
+            Text(
+                text = item.phoneNumber,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        supportingContent = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Ever Call Recorder",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = directionLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accentColor
                 )
-                Text(
-                    text = appVersion,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Info card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                if (timeStr.isNotBlank()) {
+                    Text("·", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(timeStr, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (item.sizeBytes > 0) {
+                    Text("·", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = "Automatic Call Recording",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Records calls automatically in the background using Shizuku. Configure recording rules and audio settings in Settings.",
-                        style = MaterialTheme.typography.bodySmall,
+                        formatSize(item.sizeBytes),
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-
-            Spacer(Modifier.weight(1f))
-
-            // GitHub button
-            OutlinedButton(
-                onClick = { context.openGithub() },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Open GitHub Repository")
+        },
+        trailingContent = {
+            IconButton(onClick = onFavouriteToggle, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (item.isFavourite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (item.isFavourite) "Unfavourite" else "Favourite",
+                    tint = if (item.isFavourite) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
+}
 
-            Spacer(Modifier.height(16.dp))
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun EmptyState(isFavourites: Boolean, hasQuery: Boolean) {
+    val icon = when {
+        hasQuery -> Icons.Outlined.SearchOff
+        isFavourites -> Icons.Outlined.FavoriteBorder
+        else -> Icons.Outlined.MicNone
+    }
+    val title = when {
+        hasQuery -> "No results found"
+        isFavourites -> "No favourites yet"
+        else -> "No recordings yet"
+    }
+    val body = when {
+        hasQuery -> "Try a different search term."
+        isFavourites -> "Tap the heart icon on any recording to save it here."
+        else -> "Recordings will appear here once calls are captured."
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 48.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
         }
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+private fun groupLabel(date: Date?): String {
+    if (date == null) return "Unknown date"
+    val now = Calendar.getInstance()
+    val cal = Calendar.getInstance().apply { time = date }
+    return when {
+        isSameDay(now, cal) -> "Today"
+        isYesterday(now, cal) -> "Yesterday"
+        isSameWeek(now, cal) -> SimpleDateFormat("EEEE", Locale.getDefault()).format(date)
+        isSameYear(now, cal) -> SimpleDateFormat("MMMM d", Locale.getDefault()).format(date)
+        else -> SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(date)
+    }
+}
+
+private fun isSameDay(a: Calendar, b: Calendar) =
+    a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
+    a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+
+private fun isYesterday(now: Calendar, b: Calendar): Boolean {
+    val yesterday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    return isSameDay(yesterday, b)
+}
+
+private fun isSameWeek(now: Calendar, b: Calendar) =
+    now.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
+    now.get(Calendar.WEEK_OF_YEAR) == b.get(Calendar.WEEK_OF_YEAR)
+
+private fun isSameYear(now: Calendar, b: Calendar) =
+    now.get(Calendar.YEAR) == b.get(Calendar.YEAR)
+
+private fun formatSize(bytes: Long): String = when {
+    bytes < 1024 -> "${bytes}B"
+    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+    else -> "${"%.1f".format(bytes / (1024.0 * 1024.0))}MB"
 }

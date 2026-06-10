@@ -21,6 +21,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.*
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,6 +107,8 @@ fun SettingsScreen(
     val exportLogLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
         if (uri != null) viewModel.exportLogs(uri)
     }
+
+    BackHandler { onBack() }
 
     SettingsContent(
         preferences = viewModel.preferences,
@@ -494,11 +499,11 @@ private fun RecordingSection(
     val ignoredContactsOutgoingCount = remember(updateTrigger) { preferences.getIgnoredContactsOutgoing().size }
     var showFileNameFormatDialog by remember { mutableStateOf(false) }
 
+    // ── Storage settings ──────────────────────────────────────────────────────
     SettingsSection(
         title = stringResource(R.string.settings_section_recording),
         icon = Icons.Outlined.FiberManualRecord
     ) {
-        // Folder picker row
         SectionListItem(
             icon = Icons.Outlined.Folder,
             headline = stringResource(R.string.settings_recording_folder_label),
@@ -506,7 +511,6 @@ private fun RecordingSection(
             supportingColor = MaterialTheme.colorScheme.primary,
             onClick = onSelectFolder
         )
-        // File name row
         SectionListItem(
             icon = Icons.Outlined.DriveFileRenameOutline,
             headline = stringResource(R.string.settings_file_name_template),
@@ -514,25 +518,152 @@ private fun RecordingSection(
             supportingColor = MaterialTheme.colorScheme.primary,
             onClick = { showFileNameFormatDialog = true }
         )
+    }
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), thickness = 0.5.dp)
-
-        ToggleListItem(label = stringResource(R.string.settings_auto_record_incoming), checked = autoRecordIncoming, onCheckedChange = { actions.setAutoRecordIncoming(it) })
-        AnimatedVisibility(visible = autoRecordIncoming, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column {
-                ToggleListItem(label = stringResource(R.string.settings_ignore_anonymous_incoming), checked = ignoreAnonymousIncoming, onCheckedChange = { actions.setIgnoreAnonymousIncoming(it) })
-                ToggleListItem(label = stringResource(R.string.settings_ignore_cross_country_incoming), checked = ignoreCrossCountryIncoming, onCheckedChange = { actions.setIgnoreCrossCountryIncoming(it) }, enabled = ignoreAnonymousIncoming)
-                IgnoreContactsOptions(label = stringResource(R.string.settings_ignore_contacts_incoming), selectedEnum = ignoreContactsModeIncoming, selectedCount = ignoredContactsIncomingCount, onSelected = { actions.setIgnoreContactsModeIncoming(it) }, onSelectContacts = onOpenContactsIncoming)
+    // ── Record Incoming Calls ─────────────────────────────────────────────────
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CallReceived,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(
+                text = stringResource(R.string.settings_auto_record_incoming),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                ToggleListItem(
+                    label = stringResource(R.string.settings_auto_record_incoming),
+                    checked = autoRecordIncoming,
+                    onCheckedChange = { actions.setAutoRecordIncoming(it) }
+                )
+                AnimatedVisibility(
+                    visible = autoRecordIncoming,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        ToggleListItem(
+                            label = stringResource(R.string.settings_ignore_anonymous_incoming),
+                            checked = ignoreAnonymousIncoming,
+                            onCheckedChange = { actions.setIgnoreAnonymousIncoming(it) }
+                        )
+                        ToggleListItem(
+                            label = stringResource(R.string.settings_ignore_cross_country_incoming),
+                            checked = ignoreCrossCountryIncoming,
+                            onCheckedChange = { actions.setIgnoreCrossCountryIncoming(it) },
+                            enabled = ignoreAnonymousIncoming
+                        )
+                        IgnoreContactsOptions(
+                            label = stringResource(R.string.settings_ignore_contacts_incoming),
+                            selectedEnum = ignoreContactsModeIncoming,
+                            selectedCount = ignoredContactsIncomingCount,
+                            onSelected = { actions.setIgnoreContactsModeIncoming(it) },
+                            onSelectContacts = onOpenContactsIncoming
+                        )
+                    }
+                }
             }
         }
+    }
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), thickness = 0.5.dp)
-
-        ToggleListItem(label = stringResource(R.string.settings_auto_record_outgoing), checked = autoRecordOutgoing, onCheckedChange = { actions.setAutoRecordOutgoing(it) })
-        AnimatedVisibility(visible = autoRecordOutgoing, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column {
-                ToggleListItem(label = stringResource(R.string.settings_ignore_cross_country_outgoing), checked = ignoreCrossCountryOutgoing, onCheckedChange = { actions.setIgnoreCrossCountryOutgoing(it) })
-                IgnoreContactsOptions(label = stringResource(R.string.settings_ignore_contacts_outgoing), selectedEnum = ignoreContactsModeOutgoing, selectedCount = ignoredContactsOutgoingCount, onSelected = { actions.setIgnoreContactsModeOutgoing(it) }, onSelectContacts = onOpenContactsOutgoing)
+    // ── Record Outgoing Calls ─────────────────────────────────────────────────
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CallMade,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(
+                text = stringResource(R.string.settings_auto_record_outgoing),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                ToggleListItem(
+                    label = stringResource(R.string.settings_auto_record_outgoing),
+                    checked = autoRecordOutgoing,
+                    onCheckedChange = { actions.setAutoRecordOutgoing(it) }
+                )
+                AnimatedVisibility(
+                    visible = autoRecordOutgoing,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        ToggleListItem(
+                            label = stringResource(R.string.settings_ignore_cross_country_outgoing),
+                            checked = ignoreCrossCountryOutgoing,
+                            onCheckedChange = { actions.setIgnoreCrossCountryOutgoing(it) }
+                        )
+                        IgnoreContactsOptions(
+                            label = stringResource(R.string.settings_ignore_contacts_outgoing),
+                            selectedEnum = ignoreContactsModeOutgoing,
+                            selectedCount = ignoredContactsOutgoingCount,
+                            onSelected = { actions.setIgnoreContactsModeOutgoing(it) },
+                            onSelectContacts = onOpenContactsOutgoing
+                        )
+                    }
+                }
             }
         }
     }
@@ -650,6 +781,7 @@ private fun DebugSection(preferences: AppPreferences, updateTrigger: Int, action
 // ── Internal helper composables ────────────────────────────────────────────────────────────
 
 @Composable
+// animateContentSize applied inside cards
 private fun SettingsSection(
     title: String,
     icon: ImageVector,
@@ -691,7 +823,7 @@ private fun SettingsSection(
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Column(modifier = Modifier.animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)).padding(vertical = 4.dp)) {
                 content()
             }
         }
