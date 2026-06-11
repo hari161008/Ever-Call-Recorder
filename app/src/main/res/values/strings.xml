@@ -238,7 +238,12 @@
     <string name="settings_copy_version">Copy Version</string>
     <string name="settings_view_licenses">View Licenses</string>
     <string name="settings_scrcpy_server" translatable="false">Scrcpy-Server: %1$s</string>
-    <string name="settings_open_github">Open GitHub Repository</string>
+    <string name="settings_open_github">Source Code</string>
+    <string name="settings_open_github_description">Open Source | Source Code</string>
+    <string name="settings_telegram_support">App Support Group In Telegram</string>
+    <string name="settings_telegram_support_description">Bug Report | Feature Requests | Announcements</string>
+    <string name="settings_telegram_channel">App Recommending Channel In Telegram</string>
+    <string name="settings_telegram_channel_description">Discover | Explore | Cool Apps</string>
 
     <!-- ContactSelection Dialog -->
     <string name="contact_search_hint">Search by name or number...</string>

@@ -60,7 +60,7 @@ fun PlaybackScreen(
     val subtitle = recording.contactName?.let { recording.phoneNumber } ?: ""
     val dateStr = recording.date?.let { SimpleDateFormat("MMMM d, yyyy • hh:mm a", Locale.getDefault()).format(it) } ?: ""
     val isIncoming = recording.direction == "in"
-    val accentColor = if (isIncoming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+    val accentColor = if (isIncoming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
 
     // Load contact photo
     var photoBitmap by remember(recording.phoneNumber) { mutableStateOf<ImageBitmap?>(null) }

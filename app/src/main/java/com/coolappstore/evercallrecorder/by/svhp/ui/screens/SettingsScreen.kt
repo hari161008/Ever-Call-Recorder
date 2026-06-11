@@ -61,6 +61,8 @@ import com.coolappstore.evercallrecorder.by.svhp.system.PersistentFolderPickerCo
 import com.coolappstore.evercallrecorder.by.svhp.system.copyToClipboard
 import com.coolappstore.evercallrecorder.by.svhp.system.openGithub
 import com.coolappstore.evercallrecorder.by.svhp.system.openGithubReportIssue
+import com.coolappstore.evercallrecorder.by.svhp.system.openTelegramSupportGroup
+import com.coolappstore.evercallrecorder.by.svhp.system.openTelegramChannel
 import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import com.coolappstore.evercallrecorder.by.svhp.system.takePersistableFolderPermission
 import com.coolappstore.evercallrecorder.by.svhp.ui.common.*
@@ -509,14 +511,26 @@ private fun AboutSection(versionString: String, onShowLicenses: () -> Unit) {
     SettingsSection(title = stringResource(R.string.settings_section_about), icon = Icons.Outlined.Info) {
         SectionListItem(icon = Icons.Outlined.Storage, headline = versionString, supporting = stringResource(R.string.settings_scrcpy_server, serverVersion))
         Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { context.copyToClipboard("Scrcpy-Server Version", ScrcpyConfig.SCRCPY_VERSION) }, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_copy_version)) }
-            OutlinedButton(onClick = onShowLicenses, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_view_licenses)) }
+            OutlinedButton(onClick = onShowLicenses, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_view_licenses)) }
         }
-        Button(onClick = { context.openGithub() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.medium) {
-            Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_open_github))
-        }
+        SectionListItem(
+            icon = Icons.Outlined.Code,
+            headline = stringResource(R.string.settings_open_github),
+            supporting = stringResource(R.string.settings_open_github_description),
+            onClick = { context.openGithub() }
+        )
+        SectionListItem(
+            icon = Icons.Outlined.Forum,
+            headline = stringResource(R.string.settings_telegram_support),
+            supporting = stringResource(R.string.settings_telegram_support_description),
+            onClick = { context.openTelegramSupportGroup() }
+        )
+        SectionListItem(
+            icon = Icons.Outlined.Campaign,
+            headline = stringResource(R.string.settings_telegram_channel),
+            supporting = stringResource(R.string.settings_telegram_channel_description),
+            onClick = { context.openTelegramChannel() }
+        )
         Spacer(Modifier.height(4.dp))
     }
 }

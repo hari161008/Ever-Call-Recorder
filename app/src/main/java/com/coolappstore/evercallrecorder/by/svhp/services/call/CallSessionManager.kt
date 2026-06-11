@@ -239,12 +239,20 @@ class CallSessionManager private constructor(context: Context) {
             }
         }
 
-        // 4a. Handle RINGING — if "Record when Answered" is OFF, start service immediately at ringing
-        if (state == TelephonyManager.CALL_STATE_RINGING && !preferences.isRecordOnAnswerEnabled()) {
+        // 4a. Handle RINGING
+        if (state == TelephonyManager.CALL_STATE_RINGING) {
             val ringMetadata = session.currentMetadata
             if (ringMetadata != null) {
-                AppLogger.d(TAG, "Record-on-answer is OFF: evaluating service start at RINGING state.")
-                withContext(Dispatchers.Main) { evaluateAndStartService() }
+                if (!preferences.isRecordOnAnswerEnabled()) {
+                    AppLogger.d(TAG, "Record-on-answer is OFF: evaluating service start at RINGING state.")
+                    withContext(Dispatchers.Main) { evaluateAndStartService() }
+                } else {
+                    // Record-on-Answer ON: send STANDBY early so Shizuku warms up before the call is answered.
+                    // wasRecordingServiceStartIntentSend is NOT set here so OFFHOOK still calls
+                    // evaluateAndStartService() to make the final auto-record decision.
+                    AppLogger.d(TAG, "Record-on-answer is ON: sending STANDBY at RINGING for early Shizuku warmup.")
+                    sendServiceCommand(RecordingForegroundService.ACTION_STANDBY, ringMetadata)
+                }
             }
         }
 

@@ -102,6 +102,16 @@ fun Context.openGithubReportIssue() {
     launchSmartIntent(Intent(Intent.ACTION_VIEW).apply { data = AppUrls.GITHUB_NEW_ISSUE.toUri() })
 }
 
+/** Opens the Telegram support group. */
+fun Context.openTelegramSupportGroup() {
+    launchSmartIntent(Intent(Intent.ACTION_VIEW).apply { data = AppUrls.TELEGRAM_SUPPORT_GROUP.toUri() })
+}
+
+/** Opens the Telegram app channel. */
+fun Context.openTelegramChannel() {
+    launchSmartIntent(Intent(Intent.ACTION_VIEW).apply { data = AppUrls.TELEGRAM_CHANNEL.toUri() })
+}
+
 /**
  * Copies [text] to the clipboard and shows a short confirmation message.
  * Safe to call from any thread.
