@@ -239,6 +239,15 @@ class CallSessionManager private constructor(context: Context) {
             }
         }
 
+        // 4a. Handle RINGING — if "Record when Answered" is OFF, start service immediately at ringing
+        if (state == TelephonyManager.CALL_STATE_RINGING && !preferences.isRecordOnAnswerEnabled()) {
+            val ringMetadata = session.currentMetadata
+            if (ringMetadata != null) {
+                AppLogger.d(TAG, "Record-on-answer is OFF: evaluating service start at RINGING state.")
+                withContext(Dispatchers.Main) { evaluateAndStartService() }
+            }
+        }
+
         // 4. Handle OFFHOOK (now in a call) + The Verification Window (Non-blocking delay)
         if (state == TelephonyManager.CALL_STATE_OFFHOOK) {
             // Handle anonymous and blank numbers (due to double broadcast behavior with one having no number)

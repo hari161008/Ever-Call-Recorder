@@ -66,7 +66,13 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun seekForward() { player.seekTo((player.currentPosition + 5_000).coerceAtMost(player.duration)) }
     fun seekBack() { player.seekTo((player.currentPosition - 5_000).coerceAtLeast(0)) }
-    fun seekTo(ms: Long) { player.seekTo(ms) }
+
+    /** Seek to position and immediately update the displayed position so the slider stays put when paused. */
+    fun seekTo(ms: Long) {
+        player.seekTo(ms)
+        val dur = _duration.value
+        _currentPosition.value = if (dur > 0) ms.coerceIn(0L, dur) else ms.coerceAtLeast(0L)
+    }
 
     fun updateNote(text: String) {
         _note.value = text

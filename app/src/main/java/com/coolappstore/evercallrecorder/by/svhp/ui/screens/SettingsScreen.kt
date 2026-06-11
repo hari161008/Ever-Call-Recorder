@@ -1,9 +1,6 @@
 /*
  * ShizuCallRecorder: FOSS Call recording powered through ADB/Shizuku!
  *  Copyright (C) 2026-present kitsumed (Med)
- *  This software is licensed under the GNU General Public License v3 or later, with additional terms as permitted under Section 7.
- *  The full license text is available in the LICENSE file at the root of this project.
- *  This software is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
 package com.coolappstore.evercallrecorder.by.svhp.ui.screens
@@ -11,18 +8,16 @@ package com.coolappstore.evercallrecorder.by.svhp.ui.screens
 import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -30,29 +25,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -69,28 +63,15 @@ import com.coolappstore.evercallrecorder.by.svhp.system.openGithub
 import com.coolappstore.evercallrecorder.by.svhp.system.openGithubReportIssue
 import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import com.coolappstore.evercallrecorder.by.svhp.system.takePersistableFolderPermission
-import com.coolappstore.evercallrecorder.by.svhp.ui.common.ContactSelectionDialog
-import com.coolappstore.evercallrecorder.by.svhp.ui.common.FileNameFormatDialog
-import com.coolappstore.evercallrecorder.by.svhp.ui.common.M3DropdownField
-import com.coolappstore.evercallrecorder.by.svhp.ui.common.OptionItem
-import com.coolappstore.evercallrecorder.by.svhp.ui.common.ToggleListItem
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.ContactPickerState
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.ContactPickerType
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.ContactPickerViewModel
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.DebugAction
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.SettingsActions
-import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.SettingsViewModel
+import com.coolappstore.evercallrecorder.by.svhp.ui.common.*
+import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.*
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import org.xmlpull.v1.XmlPullParser
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(
-    viewModel: SettingsViewModel,
-    onBack: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
+fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val updateTrigger by viewModel.updateTrigger.collectAsState()
     val contactPickerViewModel: ContactPickerViewModel = viewModel()
@@ -103,13 +84,11 @@ fun SettingsScreen(
         }
         viewModel.refresh()
     }
-
     val exportLogLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
         if (uri != null) viewModel.exportLogs(uri)
     }
 
     BackHandler { onBack() }
-
     SettingsContent(
         preferences = viewModel.preferences,
         updateTrigger = updateTrigger,
@@ -118,10 +97,7 @@ fun SettingsScreen(
         onSelectFolder = { folderPickerLauncher.launch(null) },
         onOpenContactsIncoming = { contactPickerViewModel.openContactPicker(ContactPickerType.INCOMING) },
         onOpenContactsOutgoing = { contactPickerViewModel.openContactPicker(ContactPickerType.OUTGOING) },
-        onConfirmContacts = { numbers ->
-            contactPickerViewModel.confirmContactPicker(numbers)
-            viewModel.refresh()
-        },
+        onConfirmContacts = { numbers -> contactPickerViewModel.confirmContactPicker(numbers); viewModel.refresh() },
         onDismissContacts = { contactPickerViewModel.dismissContactPicker() },
         onExportLogs = { exportLogLauncher.launch("evercallrecorder_bug_report.log") },
         onBack = onBack,
@@ -129,8 +105,8 @@ fun SettingsScreen(
     )
 }
 
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun SettingsContent(
     preferences: AppPreferences,
     updateTrigger: Int,
@@ -151,51 +127,32 @@ fun SettingsContent(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) },
+                title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            // ── Sections ─────────────────────────────────────────────────────────
             item {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Spacer(Modifier.height(8.dp))
-                    AboutSection(
-                        versionString = actions.getAppVersion(),
-                        onShowLicenses = { showLicensesDialog = true }
-                    )
-                    RecordingSection(
-                        preferences = preferences,
-                        updateTrigger = updateTrigger,
-                        actions = actions,
-                        onSelectFolder = onSelectFolder,
-                        onOpenContactsIncoming = onOpenContactsIncoming,
-                        onOpenContactsOutgoing = onOpenContactsOutgoing
-                    )
+                    // ORDER: Updates → Appearance → Recording → Audio → Security → Languages → About → Debug
+                    UpdatesSection(actions)
+                    AppearanceSection(preferences, updateTrigger, actions)
+                    RecordingSection(preferences, updateTrigger, actions, onSelectFolder, onOpenContactsIncoming, onOpenContactsOutgoing)
                     AudioSection(preferences, updateTrigger, actions)
                     SecuritySection(preferences, updateTrigger, actions)
-                    VisualSection(preferences, updateTrigger, actions)
+                    LanguagesSection(preferences, updateTrigger, actions)
+                    AboutSection(versionString = actions.getAppVersion(), onShowLicenses = { showLicensesDialog = true })
                     DebugSection(preferences, updateTrigger, actions, onExportLogs)
                     Spacer(Modifier.height(8.dp))
                 }
@@ -204,39 +161,13 @@ fun SettingsContent(
     }
 
     if (showLicensesDialog) {
-        Dialog(
-            onDismissRequest = { showLicensesDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface
-            ) {
+        Dialog(onDismissRequest = { showLicensesDialog = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxSize().padding(16.dp), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
                 Column {
-                    Text(
-                        text = stringResource(R.string.general_licenses),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Text(text = stringResource(R.string.general_licenses), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
                     val libraries by produceLibraries(R.raw.aboutlibraries)
-                    LibrariesContainer(
-                        libraries,
-                        Modifier.fillMaxSize().weight(1f),
-                        showAuthor = true,
-                        showLicenseBadges = true,
-                        showFundingBadges = false,
-                        showVersion = true,
-                        showDescription = true
-                    )
-                    TextButton(
-                        onClick = { showLicensesDialog = false },
-                        modifier = Modifier.align(Alignment.End).padding(8.dp)
-                    ) {
-                        Text(stringResource(R.string.general_close))
-                    }
+                    LibrariesContainer(libraries, Modifier.fillMaxSize().weight(1f), showAuthor = true, showLicenseBadges = true, showFundingBadges = false, showVersion = true, showDescription = true)
+                    TextButton(onClick = { showLicensesDialog = false }, modifier = Modifier.align(Alignment.End).padding(8.dp)) { Text(stringResource(R.string.general_close)) }
                 }
             }
         }
@@ -256,112 +187,278 @@ fun SettingsContent(
     }
 }
 
-// ── Hero Header ───────────────────────────────────────────────────────────────────────────
+// ── Updates section ───────────────────────────────────────────────────────────
 
 @Composable
-private fun SettingsHeader(appVersion: String) {
-    val primary = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
+private fun UpdatesSection(actions: SettingsActions) {
+    val context = LocalContext.current
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+    var isChecking by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        primary.copy(alpha = 0.18f),
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
-            .padding(horizontal = 24.dp, vertical = 28.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Icon badge
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        brush = Brush.linearGradient(listOf(primary, tertiary))
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Mic,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+    SettingsSection(title = stringResource(R.string.settings_section_updates), icon = Icons.Outlined.SystemUpdate) {
+        SectionListItem(
+            icon = Icons.Outlined.Info,
+            headline = actions.getAppVersion(),
+            supporting = stringResource(R.string.settings_updates_description)
+        )
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (updateStatus != null) {
+                Text(
+                    text = updateStatus!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Ever Call Recorder",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = appVersion,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-// ── Settings sections ──────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun AboutSection(versionString: String, onShowLicenses: () -> Unit) {
-    val context = LocalContext.current
-    val serverVersion = ScrcpyConfig.SCRCPY_VERSION
-
-    SettingsSection(
-        title = stringResource(R.string.settings_section_about),
-        icon = Icons.Outlined.Info
-    ) {
-        SectionListItem(
-            icon = Icons.Outlined.Storage,
-            headline = versionString,
-            supporting = stringResource(R.string.settings_scrcpy_server, serverVersion)
-        )
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { context.copyToClipboard("Scrcpy-Server Version", ScrcpyConfig.SCRCPY_VERSION) },
-                modifier = Modifier.weight(1f),
-                shape = MaterialTheme.shapes.medium
-            ) { Text(stringResource(R.string.settings_copy_version)) }
-            OutlinedButton(
-                onClick = onShowLicenses,
-                modifier = Modifier.weight(1f),
-                shape = MaterialTheme.shapes.medium
-            ) { Text(stringResource(R.string.settings_view_licenses)) }
-        }
-        Button(
-            onClick = { context.openGithub() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.settings_open_github))
+            Button(
+                onClick = { context.openGithub(); isChecking = false; updateStatus = context.getString(R.string.settings_updates_up_to_date) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                enabled = !isChecking
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_updates_check))
+            }
         }
         Spacer(Modifier.height(4.dp))
     }
 }
 
+// ── Appearance section (was Visual) ──────────────────────────────────────────
+
 @Composable
-private fun VisualSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
-    val currentThemeMode = remember(updateTrigger) { preferences.getThemeMode() }
-    val isDynamicColorEnabled = remember(updateTrigger) { preferences.isDynamicColorEnabled() }
-    val isShowToastsEnabled = remember(updateTrigger) { preferences.isShowToastsEnabled() }
-    val isVibrationEnabled = remember(updateTrigger) { preferences.isVibrationEnabled() }
+private fun AppearanceSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
+    val currentThemeMode     = remember(updateTrigger) { preferences.getThemeMode() }
+    val isDynamicColorEnabled= remember(updateTrigger) { preferences.isDynamicColorEnabled() }
+    val isShowToastsEnabled  = remember(updateTrigger) { preferences.isShowToastsEnabled() }
+    val isVibrationEnabled   = remember(updateTrigger) { preferences.isVibrationEnabled() }
+    val accentArgb           = remember(updateTrigger) { preferences.getAccentColor() }
+
+    SettingsSection(title = stringResource(R.string.settings_section_appearance), icon = Icons.Outlined.Palette) {
+        // Pill-style theme mode selector
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.settings_theme_mode),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(2.dp))
+            ThemeModePillSelector(current = currentThemeMode, onSelect = { actions.setThemeMode(it) })
+        }
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        ToggleListItem(
+            label = stringResource(R.string.settings_dynamic_color),
+            checked = isDynamicColorEnabled,
+            onCheckedChange = { actions.setDynamicColorEnabled(it) }
+        )
+        // Color picker when dynamic color is OFF
+        AnimatedVisibility(visible = !isDynamicColorEnabled, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(12.dp))
+                Text(text = stringResource(R.string.settings_accent_color), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(12.dp))
+                InlineColorPicker(currentArgb = accentArgb, onColorChanged = { actions.setAccentColor(it) })
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+        ToggleListItem(label = stringResource(R.string.settings_show_toasts), checked = isShowToastsEnabled, onCheckedChange = { actions.setShowToastsEnabled(it) })
+        ToggleListItem(label = stringResource(R.string.settings_vibration_enabled), checked = isVibrationEnabled, onCheckedChange = { actions.setVibrationEnabled(it) })
+    }
+}
+
+@Composable
+private fun ThemeModePillSelector(current: AppPreferences.ThemeMode, onSelect: (AppPreferences.ThemeMode) -> Unit) {
+    data class PillOption(val mode: AppPreferences.ThemeMode, val label: String)
+    val options = listOf(
+        PillOption(AppPreferences.ThemeMode.LIGHT,   "Light"),
+        PillOption(AppPreferences.ThemeMode.DARK,    "Dark"),
+        PillOption(AppPreferences.ThemeMode.SYSTEM,  "Auto"),
+        PillOption(AppPreferences.ThemeMode.WHITE,   "White"),
+        PillOption(AppPreferences.ThemeMode.BLACK,   "Black"),
+        PillOption(AppPreferences.ThemeMode.AUTO_WB, "Auto W/B"),
+    )
+    // Two rows of 3 pills
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(options.take(3), options.drop(3)).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { option ->
+                    val selected = current == option.mode
+                    Surface(
+                        onClick = { onSelect(option.mode) },
+                        modifier = Modifier.weight(1f),
+                        shape = CircleShape,
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = if (selected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 14.dp)) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// ── Inline HSV Color Picker ───────────────────────────────────────────────────
+
+@Composable
+private fun InlineColorPicker(currentArgb: Int, onColorChanged: (Int) -> Unit) {
+    // Extract HSV from stored color
+    val initialHsv = remember(currentArgb) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(currentArgb, it) }
+    }
+
+    var hue by remember(currentArgb) { mutableFloatStateOf(initialHsv[0]) }
+    var sat by remember(currentArgb) { mutableFloatStateOf(initialHsv[1]) }
+    var value by remember(currentArgb) { mutableFloatStateOf(initialHsv[2]) }
+    var hexText by remember(currentArgb) { mutableStateOf(argbToHex(currentArgb)) }
+    var hexValid by remember { mutableStateOf(true) }
+
+    val currentColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value)))
+
+    fun commit() {
+        val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
+        hexText = argbToHex(argb)
+        onColorChanged(argb)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // SV Box
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .pointerInput(hue) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val s = (down.position.x / size.width).coerceIn(0f, 1f)
+                        val v = (1f - down.position.y / size.height).coerceIn(0f, 1f)
+                        sat = s; value = v; commit()
+                        down.consume()
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { ch ->
+                                sat = (ch.position.x / size.width).coerceIn(0f, 1f)
+                                value = (1f - ch.position.y / size.height).coerceIn(0f, 1f)
+                                commit()
+                                ch.consume()
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+        ) {
+            val hueColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 1f, 1f)))
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawRect(Brush.horizontalGradient(listOf(Color.White, hueColor)))
+                drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                // Thumb
+                val thumbX = sat * size.width
+                val thumbY = (1f - value) * size.height
+                drawCircle(color = currentColor, radius = 10.dp.toPx(), center = Offset(thumbX, thumbY))
+                drawCircle(color = Color.White, radius = 10.dp.toPx(), center = Offset(thumbX, thumbY), style = Stroke(width = 2.dp.toPx()))
+            }
+        }
+
+        // Hue strip
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(28.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        hue = (down.position.x / size.width * 360f).coerceIn(0f, 360f)
+                        commit(); down.consume()
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { ch ->
+                                hue = (ch.position.x / size.width * 360f).coerceIn(0f, 360f)
+                                commit(); ch.consume()
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+        ) {
+            val hueColors = listOf(
+                Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green,
+                Color.Cyan, Color.Blue, Color(0xFF8B00FF), Color.Red
+            )
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawRect(Brush.horizontalGradient(hueColors))
+                // Thumb line
+                val thumbX = (hue / 360f) * size.width
+                drawCircle(color = Color.White, radius = (size.height / 2f) - 2.dp.toPx(), center = Offset(thumbX, size.height / 2f), style = Stroke(width = 2.dp.toPx()))
+                drawCircle(color = Color.Black.copy(alpha = 0.3f), radius = (size.height / 2f) - 1.dp.toPx(), center = Offset(thumbX, size.height / 2f), style = Stroke(width = 1.dp.toPx()))
+            }
+        }
+
+        // Preview + Hex input
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Color preview swatch
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(currentColor)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+            // Hex input
+            OutlinedTextField(
+                value = hexText,
+                onValueChange = { raw ->
+                    hexText = raw
+                    val cleaned = raw.trimStart('#')
+                    if (cleaned.length == 6) {
+                        try {
+                            val parsed = android.graphics.Color.parseColor("#$cleaned")
+                            val hsv = FloatArray(3)
+                            android.graphics.Color.colorToHSV(parsed, hsv)
+                            hue = hsv[0]; sat = hsv[1]; value = hsv[2]
+                            onColorChanged(parsed)
+                            hexValid = true
+                        } catch (_: Exception) { hexValid = false }
+                    } else { hexValid = false }
+                },
+                modifier = Modifier.weight(1f),
+                label = { Text(stringResource(R.string.settings_accent_color_hex)) },
+                singleLine = true,
+                isError = !hexValid,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                ),
+                prefix = { Text("#", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done)
+            )
+        }
+    }
+}
+
+private fun argbToHex(argb: Int): String {
+    return "%06X".format(argb and 0x00FFFFFF)
+}
+
+// ── Languages section ─────────────────────────────────────────────────────────
+
+@Composable
+private fun LanguagesSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
     val context = LocalContext.current
     val resources = LocalResources.current
 
@@ -369,7 +466,6 @@ private fun VisualSection(preferences: AppPreferences, updateTrigger: Int, actio
         val currentLocales = AppCompatDelegate.getApplicationLocales()
         if (currentLocales.isEmpty) "" else currentLocales[0]?.toLanguageTag() ?: ""
     }
-
     val languageOptions = remember(context) {
         val options = mutableListOf(OptionItem("", resources.getString(R.string.settings_language_system)))
         @SuppressLint("DiscouragedApi")
@@ -382,115 +478,63 @@ private fun VisualSection(preferences: AppPreferences, updateTrigger: Int, actio
                     val localeName = parser.getAttributeValue("http://schemas.android.com/apk/res/android", "name")
                     if (localeName != null) {
                         val locale = Locale.forLanguageTag(localeName)
-                        val displayName = locale.getDisplayName(locale).replaceFirstChar {
-                            if (it.isLowerCase()) it.titlecase(locale) else it.toString()
-                        }
+                        val displayName = locale.getDisplayName(locale).replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
                         options.add(OptionItem(localeName, displayName))
                     }
                 }
                 eventType = parser.next()
             }
-        } catch (_: Exception) {
-            options.add(OptionItem("en", "English (Provided as fallback)"))
-        }
+        } catch (_: Exception) { options.add(OptionItem("en", "English (Provided as fallback)")) }
         options.distinctBy { it.key }
     }
 
-    SettingsSection(
-        title = stringResource(R.string.settings_section_visual),
-        icon = Icons.Outlined.Palette
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SettingsSection(title = stringResource(R.string.settings_section_language), icon = Icons.Outlined.Language) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             M3DropdownField(
                 label = stringResource(R.string.settings_language),
                 selected = languageOptions.find { it.key == currentLanguage } ?: languageOptions.first(),
                 options = languageOptions,
                 onOptionSelected = { actions.setAppLanguage(it.key) }
             )
-            val themeOptions = AppPreferences.ThemeMode.entries.map { mode ->
-                val labelRes = when (mode) {
-                    AppPreferences.ThemeMode.SYSTEM -> R.string.settings_theme_mode_system
-                    AppPreferences.ThemeMode.LIGHT -> R.string.settings_theme_mode_light
-                    AppPreferences.ThemeMode.DARK -> R.string.settings_theme_mode_dark
-                }
-                OptionItem(mode.key, stringResource(labelRes))
-            }
-            val defaultThemeMode = AppPreferences.DefaultsValue.THEME_MODE.key
-            M3DropdownField(
-                label = stringResource(R.string.settings_theme_mode),
-                selected = themeOptions.find { it.key == currentThemeMode.key }
-                    ?: themeOptions.find { it.key == defaultThemeMode }
-                    ?: themeOptions.first(),
-                options = themeOptions,
-                onOptionSelected = { actions.setThemeMode(AppPreferences.ThemeMode.fromKey(it.key)) }
-            )
         }
-        ToggleListItem(label = stringResource(R.string.settings_dynamic_color), checked = isDynamicColorEnabled, onCheckedChange = { actions.setDynamicColorEnabled(it) })
-        ToggleListItem(label = stringResource(R.string.settings_show_toasts), checked = isShowToastsEnabled, onCheckedChange = { actions.setShowToastsEnabled(it) })
-        ToggleListItem(label = stringResource(R.string.settings_vibration_enabled), checked = isVibrationEnabled, onCheckedChange = { actions.setVibrationEnabled(it) })
     }
 }
+
+// ── About section ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun SecuritySection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
-    val autoManageShizuku = remember(updateTrigger) { preferences.isShizukuAutoManageEnabled() }
-    val shizukuStartOnRecord = remember(updateTrigger) { preferences.isShizukuStartOnRecordEnabled() }
-    val shizukuKeepAlive = remember(updateTrigger) { preferences.isShizukuKeepAliveEnabled() }
-    val shizukuAuthKey = remember(updateTrigger) { preferences.getShizukuAuthKey() }
-
-    SettingsSection(
-        title = stringResource(R.string.settings_section_security),
-        icon = Icons.Outlined.Shield
-    ) {
-        ToggleListItem(
-            label = stringResource(R.string.settings_shizuku_auto_manage),
-            checked = autoManageShizuku,
-            onCheckedChange = { actions.setShizukuAutoManageEnabled(it) },
-            description = stringResource(R.string.settings_shizuku_auto_manage_desc)
-        )
-        AnimatedVisibility(visible = autoManageShizuku, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column {
-                var textState by remember(shizukuAuthKey) { mutableStateOf(shizukuAuthKey) }
-                val keyboardController = LocalSoftwareKeyboardController.current
-                var isFocused by remember { mutableStateOf(false) }
-                OutlinedTextField(
-                    value = textState,
-                    onValueChange = { textState = it },
-                    label = { Text(stringResource(R.string.settings_shizuku_auth_key)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-                        .onFocusChanged { isFocused = it.isFocused },
-                    singleLine = true,
-                    visualTransformation = if (isFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password, showKeyboardOnFocus = true),
-                    keyboardActions = KeyboardActions(onDone = {
-                        actions.setShizukuAuthKey(textState)
-                        keyboardController?.hide()
-                    })
-                )
-                ToggleListItem(label = stringResource(R.string.settings_shizuku_start_on_record), checked = shizukuStartOnRecord, onCheckedChange = { actions.setShizukuStartOnRecordEnabled(it) }, description = stringResource(R.string.settings_shizuku_start_on_record_desc))
-                ToggleListItem(label = stringResource(R.string.settings_shizuku_keep_alive), checked = shizukuKeepAlive, onCheckedChange = { actions.setShizukuKeepAliveEnabled(it) }, description = stringResource(R.string.settings_shizuku_keep_alive_desc))
-            }
+private fun AboutSection(versionString: String, onShowLicenses: () -> Unit) {
+    val context = LocalContext.current
+    val serverVersion = ScrcpyConfig.SCRCPY_VERSION
+    SettingsSection(title = stringResource(R.string.settings_section_about), icon = Icons.Outlined.Info) {
+        SectionListItem(icon = Icons.Outlined.Storage, headline = versionString, supporting = stringResource(R.string.settings_scrcpy_server, serverVersion))
+        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { context.copyToClipboard("Scrcpy-Server Version", ScrcpyConfig.SCRCPY_VERSION) }, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_copy_version)) }
+            OutlinedButton(onClick = onShowLicenses, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_view_licenses)) }
         }
+        Button(onClick = { context.openGithub() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.medium) {
+            Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.settings_open_github))
+        }
+        Spacer(Modifier.height(4.dp))
     }
 }
+
+// ── Recording section ─────────────────────────────────────────────────────────
 
 @Composable
 private fun RecordingSection(
-    preferences: AppPreferences,
-    updateTrigger: Int,
-    actions: SettingsActions,
-    onSelectFolder: () -> Unit,
-    onOpenContactsIncoming: () -> Unit,
-    onOpenContactsOutgoing: () -> Unit
+    preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions,
+    onSelectFolder: () -> Unit, onOpenContactsIncoming: () -> Unit, onOpenContactsOutgoing: () -> Unit
 ) {
     val context = LocalContext.current
     val recordingFolderLabel = remember(updateTrigger) { SafHelper.getFolderDisplayNameOrNull(context, preferences.getRecordingFolderUri()) }
-    val fileNameFormat = remember(updateTrigger) { preferences.getFileNameTemplate() }
-    val autoRecordIncoming = remember(updateTrigger) { preferences.isAutoRecordIncomingEnabled() }
-    val autoRecordOutgoing = remember(updateTrigger) { preferences.isAutoRecordOutgoingEnabled() }
-    val ignoreAnonymousIncoming = remember(updateTrigger) { preferences.isIgnoreAnonymousIncomingEnabled() }
+    val fileNameFormat       = remember(updateTrigger) { preferences.getFileNameTemplate() }
+    val recordOnAnswer       = remember(updateTrigger) { preferences.isRecordOnAnswerEnabled() }
+    val autoRecordIncoming   = remember(updateTrigger) { preferences.isAutoRecordIncomingEnabled() }
+    val autoRecordOutgoing   = remember(updateTrigger) { preferences.isAutoRecordOutgoingEnabled() }
+    val ignoreAnonymousIncoming    = remember(updateTrigger) { preferences.isIgnoreAnonymousIncomingEnabled() }
     val ignoreCrossCountryIncoming = remember(updateTrigger) { preferences.isIgnoreCrossCountryIncomingEnabled() }
     val ignoreContactsModeIncoming = remember(updateTrigger) { preferences.getIgnoreContactsModeIncoming() }
     val ignoreContactsModeOutgoing = remember(updateTrigger) { preferences.getIgnoreContactsModeOutgoing() }
@@ -499,169 +543,57 @@ private fun RecordingSection(
     val ignoredContactsOutgoingCount = remember(updateTrigger) { preferences.getIgnoredContactsOutgoing().size }
     var showFileNameFormatDialog by remember { mutableStateOf(false) }
 
-    // ── Storage settings ──────────────────────────────────────────────────────
-    SettingsSection(
-        title = stringResource(R.string.settings_section_recording),
-        icon = Icons.Outlined.FiberManualRecord
-    ) {
-        SectionListItem(
-            icon = Icons.Outlined.Folder,
-            headline = stringResource(R.string.settings_recording_folder_label),
-            supporting = recordingFolderLabel ?: stringResource(R.string.settings_tap_to_select_folder),
-            supportingColor = MaterialTheme.colorScheme.primary,
-            onClick = onSelectFolder
-        )
-        SectionListItem(
-            icon = Icons.Outlined.DriveFileRenameOutline,
-            headline = stringResource(R.string.settings_file_name_template),
-            supporting = fileNameFormat,
-            supportingColor = MaterialTheme.colorScheme.primary,
-            onClick = { showFileNameFormatDialog = true }
+    SettingsSection(title = stringResource(R.string.settings_section_recording), icon = Icons.Outlined.FiberManualRecord) {
+        SectionListItem(icon = Icons.Outlined.Folder, headline = stringResource(R.string.settings_recording_folder_label), supporting = recordingFolderLabel ?: stringResource(R.string.settings_tap_to_select_folder), supportingColor = MaterialTheme.colorScheme.primary, onClick = onSelectFolder)
+        SectionListItem(icon = Icons.Outlined.DriveFileRenameOutline, headline = stringResource(R.string.settings_file_name_template), supporting = fileNameFormat, supportingColor = MaterialTheme.colorScheme.primary, onClick = { showFileNameFormatDialog = true })
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        ToggleListItem(
+            label = stringResource(R.string.settings_record_on_answer),
+            checked = recordOnAnswer,
+            onCheckedChange = { actions.setRecordOnAnswer(it) },
+            description = stringResource(R.string.settings_record_on_answer_desc)
         )
     }
 
-    // ── Record Incoming Calls ─────────────────────────────────────────────────
+    // Incoming
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.CallReceived,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Icon(imageVector = Icons.Rounded.CallReceived, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(14.dp))
             }
-            Text(
-                text = stringResource(R.string.settings_auto_record_incoming),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(text = stringResource(R.string.settings_auto_record_incoming), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), elevation = CardDefaults.cardElevation(0.dp)) {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                ToggleListItem(
-                    label = stringResource(R.string.settings_auto_record_incoming),
-                    checked = autoRecordIncoming,
-                    onCheckedChange = { actions.setAutoRecordIncoming(it) }
-                )
-                AnimatedVisibility(
-                    visible = autoRecordIncoming,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                ToggleListItem(label = stringResource(R.string.settings_auto_record_incoming), checked = autoRecordIncoming, onCheckedChange = { actions.setAutoRecordIncoming(it) })
+                AnimatedVisibility(visible = autoRecordIncoming, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                     Column {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                        ToggleListItem(
-                            label = stringResource(R.string.settings_ignore_anonymous_incoming),
-                            checked = ignoreAnonymousIncoming,
-                            onCheckedChange = { actions.setIgnoreAnonymousIncoming(it) }
-                        )
-                        ToggleListItem(
-                            label = stringResource(R.string.settings_ignore_cross_country_incoming),
-                            checked = ignoreCrossCountryIncoming,
-                            onCheckedChange = { actions.setIgnoreCrossCountryIncoming(it) },
-                            enabled = ignoreAnonymousIncoming
-                        )
-                        IgnoreContactsOptions(
-                            label = stringResource(R.string.settings_ignore_contacts_incoming),
-                            selectedEnum = ignoreContactsModeIncoming,
-                            selectedCount = ignoredContactsIncomingCount,
-                            onSelected = { actions.setIgnoreContactsModeIncoming(it) },
-                            onSelectContacts = onOpenContactsIncoming
-                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                        ToggleListItem(label = stringResource(R.string.settings_ignore_anonymous_incoming), checked = ignoreAnonymousIncoming, onCheckedChange = { actions.setIgnoreAnonymousIncoming(it) })
+                        ToggleListItem(label = stringResource(R.string.settings_ignore_cross_country_incoming), checked = ignoreCrossCountryIncoming, onCheckedChange = { actions.setIgnoreCrossCountryIncoming(it) }, enabled = ignoreAnonymousIncoming)
+                        IgnoreContactsOptions(label = stringResource(R.string.settings_ignore_contacts_incoming), selectedEnum = ignoreContactsModeIncoming, selectedCount = ignoredContactsIncomingCount, onSelected = { actions.setIgnoreContactsModeIncoming(it) }, onSelectContacts = onOpenContactsIncoming)
                     }
                 }
             }
         }
     }
 
-    // ── Record Outgoing Calls ─────────────────────────────────────────────────
+    // Outgoing
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.CallMade,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Icon(imageVector = Icons.Rounded.CallMade, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(14.dp))
             }
-            Text(
-                text = stringResource(R.string.settings_auto_record_outgoing),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiary,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(text = stringResource(R.string.settings_auto_record_outgoing), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), elevation = CardDefaults.cardElevation(0.dp)) {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                ToggleListItem(
-                    label = stringResource(R.string.settings_auto_record_outgoing),
-                    checked = autoRecordOutgoing,
-                    onCheckedChange = { actions.setAutoRecordOutgoing(it) }
-                )
-                AnimatedVisibility(
-                    visible = autoRecordOutgoing,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                ToggleListItem(label = stringResource(R.string.settings_auto_record_outgoing), checked = autoRecordOutgoing, onCheckedChange = { actions.setAutoRecordOutgoing(it) })
+                AnimatedVisibility(visible = autoRecordOutgoing, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                     Column {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                        ToggleListItem(
-                            label = stringResource(R.string.settings_ignore_cross_country_outgoing),
-                            checked = ignoreCrossCountryOutgoing,
-                            onCheckedChange = { actions.setIgnoreCrossCountryOutgoing(it) }
-                        )
-                        IgnoreContactsOptions(
-                            label = stringResource(R.string.settings_ignore_contacts_outgoing),
-                            selectedEnum = ignoreContactsModeOutgoing,
-                            selectedCount = ignoredContactsOutgoingCount,
-                            onSelected = { actions.setIgnoreContactsModeOutgoing(it) },
-                            onSelectContacts = onOpenContactsOutgoing
-                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                        ToggleListItem(label = stringResource(R.string.settings_ignore_cross_country_outgoing), checked = ignoreCrossCountryOutgoing, onCheckedChange = { actions.setIgnoreCrossCountryOutgoing(it) })
+                        IgnoreContactsOptions(label = stringResource(R.string.settings_ignore_contacts_outgoing), selectedEnum = ignoreContactsModeOutgoing, selectedCount = ignoredContactsOutgoingCount, onSelected = { actions.setIgnoreContactsModeOutgoing(it) }, onSelectContacts = onOpenContactsOutgoing)
                     }
                 }
             }
@@ -669,45 +601,27 @@ private fun RecordingSection(
     }
 
     if (showFileNameFormatDialog) {
-        FileNameFormatDialog(
-            initialFormat = fileNameFormat,
-            onConfirm = { format ->
-                actions.setFileNameTemplate(format)
-                showFileNameFormatDialog = false
-            },
-            onDismiss = { showFileNameFormatDialog = false }
-        )
+        FileNameFormatDialog(initialFormat = fileNameFormat, onConfirm = { format -> actions.setFileNameTemplate(format); showFileNameFormatDialog = false }, onDismiss = { showFileNameFormatDialog = false })
     }
 }
+
+// ── Audio section ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun AudioSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
     val isDebugEnabled = remember(updateTrigger) { preferences.isDebugEnabled() }
-    val audioSource = remember(updateTrigger) { preferences.getAudioSource() }
-    val audioCodec = remember(updateTrigger) { preferences.getAudioCodec() }
-    val savedBitRate = remember(updateTrigger) { preferences.getAudioBitRate() }
-
-    SettingsSection(
-        title = stringResource(R.string.settings_section_audio),
-        icon = Icons.Outlined.Equalizer
-    ) {
+    val audioSource    = remember(updateTrigger) { preferences.getAudioSource() }
+    val audioCodec     = remember(updateTrigger) { preferences.getAudioCodec() }
+    val savedBitRate   = remember(updateTrigger) { preferences.getAudioBitRate() }
+    SettingsSection(title = stringResource(R.string.settings_section_audio), icon = Icons.Outlined.Equalizer) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val currentSdk = Build.VERSION.SDK_INT
-            val audioSourceOptions = ScrcpyAudioSource.entries
-                .filter { !it.isDebugOnly || isDebugEnabled }
-                .map { source ->
-                    OptionItem(
-                        key = source.cliKey,
-                        label = stringResource(source.titleResId),
-                        description = stringResource(source.descriptionResId),
-                        enabled = currentSdk >= source.minApi && (source.maxApi == null || currentSdk <= source.maxApi)
-                    )
-                }
+            val audioSourceOptions = ScrcpyAudioSource.entries.filter { !it.isDebugOnly || isDebugEnabled }.map { source ->
+                OptionItem(key = source.cliKey, label = stringResource(source.titleResId), description = stringResource(source.descriptionResId), enabled = currentSdk >= source.minApi && (source.maxApi == null || currentSdk <= source.maxApi))
+            }
             val selectedAudio = audioSourceOptions.find { it.key == audioSource } ?: audioSourceOptions.first()
             M3DropdownField(label = stringResource(R.string.settings_audio_source), selected = selectedAudio, options = audioSourceOptions, onOptionSelected = { actions.setAudioSource(it.key) })
-            selectedAudio.description?.let { desc ->
-                Text(text = desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
-            }
+            selectedAudio.description?.let { desc -> Text(text = desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) }
             val codecOptions = ScrcpyAudioCodec.entries.map { OptionItem(it.cliKey, stringResource(it.titleResId)) }
             M3DropdownField(label = stringResource(R.string.settings_audio_codec), selected = codecOptions.find { it.key == audioCodec } ?: codecOptions.first(), options = codecOptions, onOptionSelected = { actions.setAudioCodec(it.key) })
             if (!LocalInspectionMode.current && audioCodec != ScrcpyAudioCodec.AAC.cliKey) {
@@ -719,17 +633,47 @@ private fun AudioSection(preferences: AppPreferences, updateTrigger: Int, action
     }
 }
 
+// ── Security section ──────────────────────────────────────────────────────────
+
+@Composable
+private fun SecuritySection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
+    val autoManageShizuku    = remember(updateTrigger) { preferences.isShizukuAutoManageEnabled() }
+    val shizukuStartOnRecord = remember(updateTrigger) { preferences.isShizukuStartOnRecordEnabled() }
+    val shizukuKeepAlive     = remember(updateTrigger) { preferences.isShizukuKeepAliveEnabled() }
+    val shizukuAuthKey       = remember(updateTrigger) { preferences.getShizukuAuthKey() }
+    SettingsSection(title = stringResource(R.string.settings_section_security), icon = Icons.Outlined.Shield) {
+        ToggleListItem(label = stringResource(R.string.settings_shizuku_auto_manage), checked = autoManageShizuku, onCheckedChange = { actions.setShizukuAutoManageEnabled(it) }, description = stringResource(R.string.settings_shizuku_auto_manage_desc))
+        AnimatedVisibility(visible = autoManageShizuku, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            Column {
+                var textState by remember(shizukuAuthKey) { mutableStateOf(shizukuAuthKey) }
+                val keyboardController = LocalSoftwareKeyboardController.current
+                var isFocused by remember { mutableStateOf(false) }
+                OutlinedTextField(
+                    value = textState,
+                    onValueChange = { textState = it },
+                    label = { Text(stringResource(R.string.settings_shizuku_auth_key)) },
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp).onFocusChanged { isFocused = it.isFocused },
+                    singleLine = true,
+                    visualTransformation = if (isFocused) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password, showKeyboardOnFocus = true),
+                    keyboardActions = KeyboardActions(onDone = { actions.setShizukuAuthKey(textState); keyboardController?.hide() })
+                )
+                ToggleListItem(label = stringResource(R.string.settings_shizuku_start_on_record), checked = shizukuStartOnRecord, onCheckedChange = { actions.setShizukuStartOnRecordEnabled(it) }, description = stringResource(R.string.settings_shizuku_start_on_record_desc))
+                ToggleListItem(label = stringResource(R.string.settings_shizuku_keep_alive), checked = shizukuKeepAlive, onCheckedChange = { actions.setShizukuKeepAliveEnabled(it) }, description = stringResource(R.string.settings_shizuku_keep_alive_desc))
+            }
+        }
+    }
+}
+
+// ── Debug section ─────────────────────────────────────────────────────────────
+
 @Composable
 private fun DebugSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions, onExportLogs: () -> Unit) {
-    val isDebugEnabled = remember(updateTrigger) { preferences.isDebugEnabled() }
+    val isDebugEnabled    = remember(updateTrigger) { preferences.isDebugEnabled() }
     val debugCallerNumber = remember(updateTrigger) { preferences.getDebugCallerNumber() }
-    val isLoggingEnabled = remember(updateTrigger) { preferences.isLoggingEnabled() }
+    val isLoggingEnabled  = remember(updateTrigger) { preferences.isLoggingEnabled() }
     val context = LocalContext.current
-
-    SettingsSection(
-        title = stringResource(R.string.settings_section_debug),
-        icon = Icons.Outlined.BugReport
-    ) {
+    SettingsSection(title = stringResource(R.string.settings_section_debug), icon = Icons.Outlined.BugReport) {
         ToggleListItem(label = stringResource(R.string.settings_debug_logging_enabled), checked = isLoggingEnabled, onCheckedChange = { actions.setLoggingEnabled(it) }, description = if (!isLoggingEnabled) stringResource(R.string.settings_debug_logging_enabled_description) else null)
         if (isLoggingEnabled) {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -737,10 +681,7 @@ private fun DebugSection(preferences: AppPreferences, updateTrigger: Int, action
                 Text(text = stringResource(R.string.settings_debug_logging_steps), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(text = stringResource(R.string.settings_debug_logging_step_warning), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
-                if (isDebugEnabled) {
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Text(text = stringResource(R.string.settings_debug_logging_step_warning_no_redaction), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                }
+                if (isDebugEnabled) { Spacer(modifier = Modifier.height(5.dp)); Text(text = stringResource(R.string.settings_debug_logging_step_warning_no_redaction), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) }
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onExportLogs, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.settings_debug_logging_generate_report)) }
@@ -757,20 +698,12 @@ private fun DebugSection(preferences: AppPreferences, updateTrigger: Int, action
                 val keyboardController = LocalSoftwareKeyboardController.current
                 OutlinedTextField(
                     value = textState,
-                    onValueChange = { newValue ->
-                        if (newValue.matches(allowedChars)) {
-                            textState = newValue
-                            actions.setDebugCallerNumber(newValue)
-                        }
-                    },
+                    onValueChange = { newValue -> if (newValue.matches(allowedChars)) { textState = newValue; actions.setDebugCallerNumber(newValue) } },
                     label = { Text(stringResource(R.string.settings_debug_caller_number)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Phone, showKeyboardOnFocus = true),
-                    keyboardActions = KeyboardActions(onDone = {
-                        actions.setDebugCallerNumber(textState)
-                        keyboardController?.hide()
-                    })
+                    keyboardActions = KeyboardActions(onDone = { actions.setDebugCallerNumber(textState); keyboardController?.hide() })
                 )
                 DebugActionGrid(actions)
             }
@@ -778,116 +711,62 @@ private fun DebugSection(preferences: AppPreferences, updateTrigger: Int, action
     }
 }
 
-// ── Internal helper composables ────────────────────────────────────────────────────────────
+// ── Shared helper composables ─────────────────────────────────────────────────
 
 @Composable
-// animateContentSize applied inside cards
-private fun SettingsSection(
-    title: String,
-    icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit
-) {
+private fun SettingsSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Section header row with icon
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
+            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(14.dp))
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(text = title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Column(modifier = Modifier.animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)).padding(vertical = 4.dp)) {
-                content()
-            }
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), elevation = CardDefaults.cardElevation(0.dp)) {
+            Column(modifier = Modifier.animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)).padding(vertical = 4.dp)) { content() }
         }
     }
 }
 
 @Composable
-private fun SectionListItem(
-    icon: ImageVector,
-    headline: String,
-    supporting: String? = null,
-    supportingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    onClick: (() -> Unit)? = null
-) {
+private fun SectionListItem(icon: ImageVector, headline: String, supporting: String? = null, supportingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant, onClick: (() -> Unit)? = null) {
     val mod = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-    ListItem(
-        modifier = mod,
-        leadingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
-        },
-        headlineContent = { Text(headline, style = MaterialTheme.typography.bodyMedium) },
-        supportingContent = supporting?.let { { Text(it, color = supportingColor, style = MaterialTheme.typography.bodySmall) } },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
+    ListItem(modifier = mod, leadingContent = { Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }, headlineContent = { Text(headline, style = MaterialTheme.typography.bodyMedium) }, supportingContent = supporting?.let { { Text(it, color = supportingColor, style = MaterialTheme.typography.bodySmall) } }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
 }
 
 @Composable
-private fun IgnoreContactsOptions(
-    label: String,
-    selectedEnum: AppPreferences.IgnoreContactsMode,
-    selectedCount: Int,
-    onSelected: (AppPreferences.IgnoreContactsMode) -> Unit,
-    onSelectContacts: () -> Unit
-) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-        Spacer(modifier = Modifier.height(8.dp))
-        AppPreferences.IgnoreContactsMode.entries.forEach { ignoreContactMode ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelected(ignoreContactMode) }
-                    .padding(vertical = 4.dp)
-            ) {
-                RadioButton(selected = selectedEnum == ignoreContactMode, onClick = { onSelected(ignoreContactMode) })
-                Text(
-                    text = when (ignoreContactMode) {
-                        AppPreferences.IgnoreContactsMode.NONE -> stringResource(R.string.settings_ignore_contacts_none)
-                        AppPreferences.IgnoreContactsMode.ALL -> stringResource(R.string.settings_ignore_contacts_all)
-                        AppPreferences.IgnoreContactsMode.SELECTED -> stringResource(R.string.settings_ignore_contacts_selected)
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
+private fun IgnoreContactsOptions(label: String, selectedEnum: AppPreferences.IgnoreContactsMode, selectedCount: Int, onSelected: (AppPreferences.IgnoreContactsMode) -> Unit, onSelectContacts: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            AppPreferences.IgnoreContactsMode.entries.forEach { mode ->
+                val selected = selectedEnum == mode
+                val chipLabel = when (mode) {
+                    AppPreferences.IgnoreContactsMode.NONE     -> stringResource(R.string.settings_ignore_contacts_none)
+                    AppPreferences.IgnoreContactsMode.ALL      -> stringResource(R.string.settings_ignore_contacts_all)
+                    AppPreferences.IgnoreContactsMode.SELECTED -> stringResource(R.string.settings_ignore_contacts_selected)
+                }
+                Surface(
+                    onClick = { onSelected(mode) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CircleShape,
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = if (selected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 14.dp, horizontal = 16.dp)) {
+                        Text(
+                            text = chipLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
             }
         }
         if (selectedEnum == AppPreferences.IgnoreContactsMode.SELECTED) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onSelectContacts, modifier = Modifier.padding(top = 8.dp).fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+            Button(onClick = onSelectContacts, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
                 Text(stringResource(R.string.settings_select_contacts, selectedCount))
             }
         }
@@ -896,17 +775,9 @@ private fun IgnoreContactsOptions(
 
 @Composable
 private fun DebugActionGrid(actions: SettingsActions) {
-    val items = listOf(
-        DebugAction.RINGING to stringResource(R.string.settings_debug_action_ringing),
-        DebugAction.OFFHOOK to stringResource(R.string.settings_debug_action_offhook),
-        DebugAction.IDLE to stringResource(R.string.settings_debug_action_idle)
-    )
+    val items = listOf(DebugAction.RINGING to stringResource(R.string.settings_debug_action_ringing), DebugAction.OFFHOOK to stringResource(R.string.settings_debug_action_offhook), DebugAction.IDLE to stringResource(R.string.settings_debug_action_idle))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items.forEach { (action, label) ->
-            FilledTonalButton(onClick = { actions.triggerDebugAction(action) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                Text(label, style = MaterialTheme.typography.labelSmall)
-            }
-        }
+        items.forEach { (action, label) -> FilledTonalButton(onClick = { actions.triggerDebugAction(action) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text(label, style = MaterialTheme.typography.labelSmall) } }
     }
 }
 
@@ -943,19 +814,9 @@ private fun SettingsScreenPreview() {
             override fun setShizukuKeepAliveEnabled(enabled: Boolean) {}
             override fun setShizukuAuthKey(key: String) {}
             override fun setFileNameTemplate(template: String) {}
+            override fun setRecordOnAnswer(enabled: Boolean) {}
+            override fun setAccentColor(argb: Int) {}
         }
-        SettingsContent(
-            preferences = dummyPreferences,
-            updateTrigger = 0,
-            actions = dummyActions,
-            contactPickerState = null,
-            onSelectFolder = {},
-            onOpenContactsIncoming = {},
-            onOpenContactsOutgoing = {},
-            onConfirmContacts = {},
-            onDismissContacts = {},
-            onExportLogs = {},
-            onBack = {}
-        )
+        SettingsContent(preferences = dummyPreferences, updateTrigger = 0, actions = dummyActions, contactPickerState = null, onSelectFolder = {}, onOpenContactsIncoming = {}, onOpenContactsOutgoing = {}, onConfirmContacts = {}, onDismissContacts = {}, onExportLogs = {}, onBack = {})
     }
 }

@@ -2,8 +2,11 @@ package com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels
 
 import android.app.Application
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.ContactsContract
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,15 +29,17 @@ data class RecordingItem(
     val date: Date?,
     val sizeBytes: Long,
     val extension: String,
-    val isFavourite: Boolean = false
+    val isFavourite: Boolean = false,
+    val noteText: String = ""
 )
 
+// SortField.DATE kept for safe deserialization of old prefs, treated as TIME
 enum class SortField { DATE, NAME, TIME }
 enum class SortOrder { ASC, DESC }
 
 data class SortConfig(
     val field: SortField = SortField.TIME,
-    val order: SortOrder = SortOrder.DESC   // newest first by default
+    val order: SortOrder = SortOrder.DESC
 )
 
 enum class FilterTab { ALL, FAVOURITES }
@@ -50,19 +55,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading     = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
-    // Restore sort preference from disk; default: TIME DESC (newest first)
     val sortConfig = MutableStateFlow(
-        SortConfig(
-            field = SortField.valueOf(sortPrefs.getString("sort_field", SortField.TIME.name) ?: SortField.TIME.name),
-            order = SortOrder.valueOf(sortPrefs.getString("sort_order", SortOrder.DESC.name) ?: SortOrder.DESC.name)
-        )
+        run {
+            val raw = sortPrefs.getString("sort_field", SortField.TIME.name) ?: SortField.TIME.name
+            // Gracefully handle old DATE value — treat as TIME
+            val field = runCatching { SortField.valueOf(raw) }.getOrDefault(SortField.TIME)
+                .let { if (it == SortField.DATE) SortField.TIME else it }
+            SortConfig(
+                field = field,
+                order = SortOrder.valueOf(sortPrefs.getString("sort_order", SortOrder.DESC.name) ?: SortOrder.DESC.name)
+            )
+        }
     )
 
     val filterTab   = MutableStateFlow(FilterTab.ALL)
     val searchQuery = MutableStateFlow("")
     val recordings  = MutableStateFlow<List<RecordingItem>>(emptyList())
 
-    // Date formats used by the recorder
     private val dateFormats = listOf(
         SimpleDateFormat("yyyyMMdd_HHmmss.SSSZ", Locale.CANADA),
         SimpleDateFormat("yyyyMMdd_HHmmss",       Locale.CANADA)
@@ -72,7 +81,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         loadRecordings()
         viewModelScope.launch {
             sortConfig.collect { config ->
-                // Persist whenever user changes sort
                 sortPrefs.edit()
                     .putString("sort_field", config.field.name)
                     .putString("sort_order", config.order.name)
@@ -120,7 +128,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             list = list.filter {
                 it.phoneNumber.lowercase().contains(query) ||
                 it.displayName.lowercase().contains(query) ||
-                (it.contactName?.lowercase()?.contains(query) == true)
+                (it.contactName?.lowercase()?.contains(query) == true) ||
+                it.noteText.lowercase().contains(query)
             }
         }
         if (tab == FilterTab.FAVOURITES) list = list.filter { it.isFavourite }
@@ -134,7 +143,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchRecordings(): List<RecordingItem> = withContext(Dispatchers.IO) {
-        val context  = getApplication<Application>()
+        val context   = getApplication<Application>()
         val folderUri = preferences.getRecordingFolderUri() ?: return@withContext emptyList()
         val dir = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
         if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
@@ -145,19 +154,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val name     = file.name ?: return@mapNotNull null
                 val ext      = name.substringAfterLast('.', "")
                 val baseName = name.substringBeforeLast('.')
-
-                // Filename format: {yyyyMMdd}_{HHmmss.SSSZ}_{direction}_{phone_number}
-                // Splitting by "_" gives at minimum 3 parts for a valid recording
                 val parts     = baseName.split("_")
                 val direction = if (parts.size >= 3) parts[2] else ""
-                // Phone: everything after the direction token (parts[3..])
                 val phoneRaw  = if (parts.size >= 4) parts.drop(3).joinToString("_") else ""
                 val dateRaw   = if (parts.size >= 2) "${parts[0]}_${parts[1]}" else ""
-
                 val date        = parseDate(dateRaw)
                 val phoneNumber = phoneRaw.trim().ifBlank { "Unknown" }
                 val contactName = if (phoneNumber != "Unknown") resolveContactName(context, phoneNumber) else null
-
+                val noteText    = notesPrefs.getString(file.uri.toString(), "") ?: ""
                 RecordingItem(
                     uri         = file.uri,
                     displayName = name,
@@ -167,38 +171,46 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     date        = date,
                     sizeBytes   = file.length(),
                     extension   = ext,
-                    isFavourite = isFavourite(file.uri)
+                    isFavourite = isFavourite(file.uri),
+                    noteText    = noteText
                 )
             }
     }
 
     private fun parseDate(raw: String): Date? {
-        for (fmt in dateFormats) {
-            runCatching { return fmt.parse(raw) }
-        }
+        for (fmt in dateFormats) { runCatching { return fmt.parse(raw) } }
         return null
     }
 
-    /**
-     * Looks up a display name for [phoneNumber] using [ContactsContract.PhoneLookup].
-     * Intentionally does NOT gate on a permission check — we rely on the try/catch to handle
-     * SecurityException if the permission has not been granted.  The PhoneLookup API normalises
-     * numbers itself, so we pass the raw string without extra Uri.encode() to avoid double-
-     * encoding the + prefix on international numbers.
-     */
     private fun resolveContactName(context: Context, phoneNumber: String): String? {
         return try {
-            val lookupUri = Uri.withAppendedPath(
-                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-                phoneNumber              // NOT Uri.encode — PhoneLookup normalises internally
-            )
+            val lookupUri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, phoneNumber)
             context.contentResolver.query(
                 lookupUri,
                 arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
                 null, null, null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
+            )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         } catch (_: Exception) { null }
     }
+
+    /** Loads contact photo as ImageBitmap, or null if unavailable. */
+    suspend fun loadContactPhoto(context: Context, phoneNumber: String): ImageBitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                val lookupUri = Uri.withAppendedPath(
+                    ContactsContract.PhoneLookup.CONTENT_FILTER_URI, phoneNumber
+                )
+                context.contentResolver.query(
+                    lookupUri,
+                    arrayOf(ContactsContract.PhoneLookup.PHOTO_URI),
+                    null, null, null
+                )?.use { cursor ->
+                    if (!cursor.moveToFirst()) return@withContext null
+                    val photoUriStr = cursor.getString(0) ?: return@withContext null
+                    val stream = context.contentResolver.openInputStream(Uri.parse(photoUriStr))
+                        ?: return@withContext null
+                    BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                }
+            } catch (_: Exception) { null }
+        }
 }
