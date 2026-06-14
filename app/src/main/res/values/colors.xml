@@ -7,4 +7,7 @@
   ~  This software is distributed WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   -->
 
-<resources></resources>
+<resources>
+    <!-- App icon background color — also used as splash screen window background -->
+    <color name="splash_background">#4F5C39</color>
+</resources>

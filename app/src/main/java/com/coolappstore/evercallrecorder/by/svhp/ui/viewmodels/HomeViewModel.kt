@@ -28,6 +28,7 @@ data class RecordingItem(
     val direction: String,
     val date: Date?,
     val sizeBytes: Long,
+    val durationMs: Long = 0L,
     val extension: String,
     val isFavourite: Boolean = false,
     val noteText: String = ""
@@ -47,9 +48,10 @@ enum class FilterTab { ALL, FAVOURITES }
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val preferences = AppPreferences(application)
-    private val favPrefs   = application.getSharedPreferences("home_favourites",  Context.MODE_PRIVATE)
-    private val notesPrefs = application.getSharedPreferences("recording_notes",  Context.MODE_PRIVATE)
-    private val sortPrefs  = application.getSharedPreferences("sort_config",      Context.MODE_PRIVATE)
+    private val favPrefs      = application.getSharedPreferences("home_favourites",   Context.MODE_PRIVATE)
+    private val notesPrefs    = application.getSharedPreferences("recording_notes",    Context.MODE_PRIVATE)
+    private val sortPrefs     = application.getSharedPreferences("sort_config",        Context.MODE_PRIVATE)
+    private val durationCache = application.getSharedPreferences("recording_duration", Context.MODE_PRIVATE)
 
     private val _allRecordings = MutableStateFlow<List<RecordingItem>>(emptyList())
     private val _isLoading     = MutableStateFlow(false)
@@ -94,6 +96,42 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() { if (!_isLoading.value) loadRecordings() }
 
+    val selectedUris = MutableStateFlow<Set<Uri>>(emptySet())
+
+    fun toggleSelection(uri: Uri) {
+        val current = selectedUris.value.toMutableSet()
+        if (uri in current) current.remove(uri) else current.add(uri)
+        selectedUris.value = current
+    }
+
+    fun ensureSelected(uri: Uri) {
+        if (uri !in selectedUris.value)
+            selectedUris.value = selectedUris.value + uri
+    }
+
+    /** Selects all given URIs in a single atomic StateFlow update instead of N individual ones. */
+    fun selectAll(uris: Collection<Uri>) {
+        selectedUris.value = selectedUris.value + uris
+    }
+
+    fun clearSelection() { selectedUris.value = emptySet() }
+
+    fun deleteSelected(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val toDelete = selectedUris.value.toSet()
+            toDelete.forEach { uri ->
+                runCatching { DocumentFile.fromSingleUri(context, uri)?.delete() }
+                notesPrefs.edit().remove(uri.toString()).apply()
+                favPrefs.edit().remove(uri.toString()).apply()
+            }
+            withContext(Dispatchers.Main) {
+                selectedUris.value = emptySet()
+                _allRecordings.value = _allRecordings.value.filter { it.uri !in toDelete }
+                applyFilters()
+            }
+        }
+    }
+
     fun toggleFavourite(item: RecordingItem) {
         val key  = item.uri.toString()
         val isFav = favPrefs.getBoolean(key, false)
@@ -104,6 +142,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         applyFilters()
     }
 
+    fun deleteRecording(context: Context, item: RecordingItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                DocumentFile.fromSingleUri(context, item.uri)?.delete()
+            }
+            notesPrefs.edit().remove(item.uri.toString()).apply()
+            favPrefs.edit().remove(item.uri.toString()).apply()
+            withContext(Dispatchers.Main) {
+                _allRecordings.value = _allRecordings.value.filter { it.uri != item.uri }
+                applyFilters()
+            }
+        }
+    }
+
     fun getNote(uri: Uri)                = notesPrefs.getString(uri.toString(), "") ?: ""
     fun saveNote(uri: Uri, note: String) = notesPrefs.edit().putString(uri.toString(), note).apply()
 
@@ -112,9 +164,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadRecordings() {
         viewModelScope.launch {
             _isLoading.value = true
-            _allRecordings.value = fetchRecordings()
+            val fetched = fetchRecordings()
+            _allRecordings.value = fetched
             applyFilters()
             _isLoading.value = false
+            // Run cleanup rules after the initial load so UI shows immediately
+            launch(Dispatchers.IO) { runAutoDeleteIfNeeded(getApplication(), fetched) }
         }
     }
 
@@ -162,6 +217,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val phoneNumber = phoneRaw.trim().ifBlank { "Unknown" }
                 val contactName = if (phoneNumber != "Unknown") resolveContactName(context, phoneNumber) else null
                 val noteText    = notesPrefs.getString(file.uri.toString(), "") ?: ""
+                val fileSize    = file.length()
+                val durationMs  = resolveAudioDuration(context, file.uri, fileSize)
                 RecordingItem(
                     uri         = file.uri,
                     displayName = name,
@@ -169,7 +226,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     contactName = contactName,
                     direction   = direction,
                     date        = date,
-                    sizeBytes   = file.length(),
+                    sizeBytes   = fileSize,
+                    durationMs  = durationMs,
                     extension   = ext,
                     isFavourite = isFavourite(file.uri),
                     noteText    = noteText
@@ -191,6 +249,87 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 null, null, null
             )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         } catch (_: Exception) { null }
+    }
+
+    private fun resolveAudioDuration(context: Context, uri: Uri, fileSizeBytes: Long): Long {
+        // Cache key = uri + file size so cache is invalidated when the file is replaced
+        val cacheKey = "${uri}_$fileSizeBytes"
+        val cached = durationCache.getLong(cacheKey, -1L)
+        if (cached >= 0L) return cached
+
+        val duration = try {
+            val retriever = android.media.MediaMetadataRetriever()
+            try {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    retriever.setDataSource(pfd.fileDescriptor)
+                }
+                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull() ?: 0L
+            } finally {
+                retriever.release()
+            }
+        } catch (_: Exception) { 0L }
+
+        durationCache.edit().putLong(cacheKey, duration).apply()
+        return duration
+    }
+
+    /** Runs time-based and space-based auto-delete rules.
+     *  Must be called from an IO coroutine. Mutates [_allRecordings] on Main. */
+    private suspend fun runAutoDeleteIfNeeded(context: Context, recordings: List<RecordingItem>) {
+        val timeEnabled  = preferences.isAutoDeleteByTimeEnabled()
+        val spaceEnabled = preferences.isAutoDeleteBySpaceEnabled()
+        if (!timeEnabled && !spaceEnabled) return
+
+        // Re-acquire DocumentFiles from the tree so delete() has proper SAF permissions
+        val folderUri  = preferences.getRecordingFolderUri() ?: return
+        val dir        = DocumentFile.fromTreeUri(context, folderUri) ?: return
+        val treeFiles  = dir.listFiles().associateBy { it.uri }
+
+        val urisToDelete = mutableSetOf<Uri>()
+        var working = recordings.toMutableList()
+
+        // ── Time-based ───────────────────────────────────────────────────────
+        if (timeEnabled) {
+            val value       = preferences.getAutoDeleteByTimeValue().toLong().coerceAtLeast(1L)
+            val unit        = preferences.getAutoDeleteByTimeUnit()
+            val thresholdMs = if (unit == "hours") value * 3_600_000L else value * 86_400_000L
+            val cutoff      = System.currentTimeMillis() - thresholdMs
+            working.filter { it.date != null && it.date.time < cutoff }
+                .forEach { urisToDelete.add(it.uri) }
+        }
+
+        // ── Space-based ──────────────────────────────────────────────────────
+        if (spaceEnabled) {
+            val value      = preferences.getAutoDeleteBySpaceValue().toLong().coerceAtLeast(1L)
+            val unit       = preferences.getAutoDeleteBySpaceUnit()
+            val limitBytes = if (unit == "gb") value * 1_073_741_824L else value * 1_048_576L
+            // Exclude items already marked for time-based deletion so we don't over-delete
+            val remaining  = working.filter { it.uri !in urisToDelete }
+            var total      = remaining.sumOf { it.sizeBytes }
+            if (total > limitBytes) {
+                // Sort oldest first, delete until under limit
+                for (item in remaining.sortedBy { it.date }) {
+                    if (total <= limitBytes) break
+                    urisToDelete.add(item.uri)
+                    total -= item.sizeBytes
+                }
+            }
+        }
+
+        if (urisToDelete.isEmpty()) return
+
+        // Delete via tree DocumentFile — most reliable with SAF permissions
+        urisToDelete.forEach { uri ->
+            runCatching { treeFiles[uri]?.delete() }
+            notesPrefs.edit().remove(uri.toString()).apply()
+            favPrefs.edit().remove(uri.toString()).apply()
+        }
+
+        withContext(Dispatchers.Main) {
+            _allRecordings.value = _allRecordings.value.filter { it.uri !in urisToDelete }
+            applyFilters()
+        }
     }
 
     /** Loads contact photo as ImageBitmap, or null if unavailable. */

@@ -8,7 +8,7 @@
   -->
 
 <resources>
-    <!--<style name="Theme.EverCallRecorder" parent="android:Theme.Material.Light.NoActionBar" />  OLD, FOR ComponentActivity -->
-    <!-- Use AppCompat for better compatibility with older Android versions and to support features like Selecting the language. -->
-    <style name="Theme.EverCallRecorder" parent="Theme.AppCompat.NoActionBar" />
+    <style name="Theme.EverCallRecorder" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
 </resources>

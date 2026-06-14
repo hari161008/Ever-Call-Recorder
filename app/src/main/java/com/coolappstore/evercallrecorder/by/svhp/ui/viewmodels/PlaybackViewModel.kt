@@ -79,6 +79,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         currentUri?.let { notesPrefs.edit().putString(it.toString(), text).apply() }
     }
 
+    /** Called when leaving the playback screen — pauses, clears buffered media and resets state.
+     *  The player instance itself is kept alive (reused on next visit); it is only fully
+     *  released in [onCleared] when the ViewModel is destroyed. */
+    fun resetOnLeave() {
+        progressJob?.cancel()
+        player.pause()
+        player.clearMediaItems()
+        currentUri = null
+        _isPlaying.value = false
+        _currentPosition.value = 0L
+        _duration.value = 0L
+    }
+
     private fun startProgressTracking() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {

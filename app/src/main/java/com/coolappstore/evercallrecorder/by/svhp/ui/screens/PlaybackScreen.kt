@@ -18,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -53,14 +52,15 @@ fun PlaybackScreen(
     val note by vm.note.collectAsState()
 
     LaunchedEffect(recording.uri) { vm.load(recording.uri) }
-    DisposableEffect(Unit) { onDispose { vm.player.pause() } }
+    DisposableEffect(Unit) { onDispose { vm.resetOnLeave() } }
     BackHandler { onBack() }
 
     val title = recording.contactName ?: recording.phoneNumber
     val subtitle = recording.contactName?.let { recording.phoneNumber } ?: ""
     val dateStr = recording.date?.let { SimpleDateFormat("MMMM d, yyyy • hh:mm a", Locale.getDefault()).format(it) } ?: ""
-    val isIncoming = recording.direction == "in"
-    val accentColor = if (isIncoming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+    val isIncoming  = recording.direction == "in"
+    // accentColor is theme-driven and the same for both directions — direction is shown via badge
+    val accentColor = MaterialTheme.colorScheme.primary
 
     // Load contact photo
     var photoBitmap by remember(recording.phoneNumber) { mutableStateOf<ImageBitmap?>(null) }
@@ -173,7 +173,7 @@ fun PlaybackScreen(
                             Icon(Icons.Rounded.Replay5, contentDescription = "Back 5s", modifier = Modifier.size(26.dp))
                         }
                         FilledIconButton(onClick = { vm.togglePlayPause() }, modifier = Modifier.size(68.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = accentColor)) {
-                            Icon(imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = if (isPlaying) "Pause" else "Play", modifier = Modifier.size(36.dp), tint = Color.White)
+                            Icon(imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = if (isPlaying) "Pause" else "Play", modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onPrimary)
                         }
                         FilledTonalIconButton(onClick = { vm.seekForward() }, modifier = Modifier.size(52.dp), colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                             Icon(Icons.Rounded.Forward5, contentDescription = "Forward 5s", modifier = Modifier.size(26.dp))
@@ -269,13 +269,47 @@ private fun buildHighlightedText(
 @Composable
 private fun PlayerVisualizer(isPlaying: Boolean, accentColor: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "viz")
-    val barCount = 24
-    Row(modifier = Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally)) {
+    val barCount = 28
+
+    // Each bar has its own target height that changes based on isPlaying
+    // animateFloatAsState gives smooth transition when isPlaying toggles
+    val idleHeights = remember { List(barCount) { index -> 0.08f + (index % 5) * 0.035f } }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+    ) {
         repeat(barCount) { index ->
-            val animatedHeight by if (isPlaying) {
-                infiniteTransition.animateFloat(initialValue = 0.15f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(durationMillis = 300 + (index % 6) * 80, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse), label = "bar$index")
-            } else { remember { mutableFloatStateOf(0.25f) } }
-            Box(modifier = Modifier.width(4.dp).fillMaxHeight(animatedHeight).clip(RoundedCornerShape(2.dp)).background(Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.9f), accentColor.copy(alpha = 0.3f)))))
+            val groupOffset  = (index % 5) * 130
+            val baseDuration = 700 + (index % 8) * 90
+
+            val playingHeight by infiniteTransition.animateFloat(
+                initialValue = 0.12f,
+                targetValue  = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation  = tween(durationMillis = baseDuration, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                    initialStartOffset = StartOffset(groupOffset + index * 22)
+                ),
+                label = "bar$index"
+            )
+
+            val targetHeight = if (isPlaying) playingHeight else idleHeights[index]
+
+            val smoothHeight by animateFloatAsState(
+                targetValue  = targetHeight,
+                animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+                label = "smooth$index"
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight(smoothHeight.coerceIn(0.05f, 1f))
+                    .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp, bottomStart = 1.5.dp, bottomEnd = 1.5.dp))
+                    .background(accentColor.copy(alpha = (0.5f + smoothHeight * 0.5f).coerceIn(0.5f, 1f)))
+            )
         }
     }
 }

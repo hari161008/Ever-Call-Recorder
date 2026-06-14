@@ -54,6 +54,14 @@ class AppPreferences(context: Context) {
         const val SHIZUKU_AUTH_KEY = ""
         // Accent color default: original green
         val ACCENT_COLOR: Int = DEFAULT_ACCENT_ARGB
+        // Auto-delete defaults
+        const val AUTO_DELETE_BY_TIME_ENABLED = false
+        const val AUTO_DELETE_BY_TIME_VALUE   = 7
+        const val AUTO_DELETE_BY_TIME_UNIT    = "days"   // "hours" | "days"
+        const val AUTO_DELETE_BY_SPACE_ENABLED = false
+        const val AUTO_DELETE_BY_SPACE_VALUE   = 500
+        const val AUTO_DELETE_BY_SPACE_UNIT    = "mb"    // "mb" | "gb"
+        const val AUTO_UPDATE_CHECK            = true
     }
 
     enum class Key(val id: String) {
@@ -84,7 +92,14 @@ class AppPreferences(context: Context) {
         SHIZUKU_START_ON_RECORD("shizuku_start_on_record"),
         SHIZUKU_KEEP_ALIVE("shizuku_keep_alive"),
         SHIZUKU_AUTH_KEY("shizuku_auth_key"),
-        ACCENT_COLOR("accent_color");
+        ACCENT_COLOR("accent_color"),
+        AUTO_DELETE_BY_TIME_ENABLED("auto_delete_by_time_enabled"),
+        AUTO_DELETE_BY_TIME_VALUE("auto_delete_by_time_value"),
+        AUTO_DELETE_BY_TIME_UNIT("auto_delete_by_time_unit"),
+        AUTO_DELETE_BY_SPACE_ENABLED("auto_delete_by_space_enabled"),
+        AUTO_DELETE_BY_SPACE_VALUE("auto_delete_by_space_value"),
+        AUTO_DELETE_BY_SPACE_UNIT("auto_delete_by_space_unit"),
+        AUTO_UPDATE_CHECK("auto_update_check");
     }
 
     enum class IgnoreContactsMode(val key: String) {
@@ -172,4 +187,22 @@ class AppPreferences(context: Context) {
     fun getAccentColor(): Int = getInt(Key.ACCENT_COLOR, DefaultsValue.ACCENT_COLOR)
     /** Stores the custom accent color as ARGB-packed Int. */
     fun setAccentColor(argb: Int) = setInt(Key.ACCENT_COLOR, argb)
+
+    // ── Auto-delete by time ──────────────────────────────────────────────────
+    fun isAutoDeleteByTimeEnabled() = getBoolean(Key.AUTO_DELETE_BY_TIME_ENABLED, DefaultsValue.AUTO_DELETE_BY_TIME_ENABLED)
+    fun setAutoDeleteByTimeEnabled(enabled: Boolean) = setBoolean(Key.AUTO_DELETE_BY_TIME_ENABLED, enabled)
+    fun getAutoDeleteByTimeValue() = getInt(Key.AUTO_DELETE_BY_TIME_VALUE, DefaultsValue.AUTO_DELETE_BY_TIME_VALUE)
+    fun setAutoDeleteByTimeValue(value: Int) = setInt(Key.AUTO_DELETE_BY_TIME_VALUE, value)
+    fun getAutoDeleteByTimeUnit() = getString(Key.AUTO_DELETE_BY_TIME_UNIT, DefaultsValue.AUTO_DELETE_BY_TIME_UNIT) ?: DefaultsValue.AUTO_DELETE_BY_TIME_UNIT
+    fun setAutoDeleteByTimeUnit(unit: String) = setString(Key.AUTO_DELETE_BY_TIME_UNIT, unit)
+
+    // ── Auto-delete by space ─────────────────────────────────────────────────
+    fun isAutoDeleteBySpaceEnabled() = getBoolean(Key.AUTO_DELETE_BY_SPACE_ENABLED, DefaultsValue.AUTO_DELETE_BY_SPACE_ENABLED)
+    fun setAutoDeleteBySpaceEnabled(enabled: Boolean) = setBoolean(Key.AUTO_DELETE_BY_SPACE_ENABLED, enabled)
+    fun getAutoDeleteBySpaceValue() = getInt(Key.AUTO_DELETE_BY_SPACE_VALUE, DefaultsValue.AUTO_DELETE_BY_SPACE_VALUE)
+    fun setAutoDeleteBySpaceValue(value: Int) = setInt(Key.AUTO_DELETE_BY_SPACE_VALUE, value)
+    fun getAutoDeleteBySpaceUnit() = getString(Key.AUTO_DELETE_BY_SPACE_UNIT, DefaultsValue.AUTO_DELETE_BY_SPACE_UNIT) ?: DefaultsValue.AUTO_DELETE_BY_SPACE_UNIT
+    fun setAutoDeleteBySpaceUnit(unit: String) = setString(Key.AUTO_DELETE_BY_SPACE_UNIT, unit)
+    fun isAutoUpdateCheckEnabled() = getBoolean(Key.AUTO_UPDATE_CHECK, DefaultsValue.AUTO_UPDATE_CHECK)
+    fun setAutoUpdateCheckEnabled(enabled: Boolean) = setBoolean(Key.AUTO_UPDATE_CHECK, enabled)
 }

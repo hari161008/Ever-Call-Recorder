@@ -55,6 +55,13 @@ interface SettingsActions {
     fun setFileNameTemplate(template: String)
     fun setRecordOnAnswer(enabled: Boolean)
     fun setAccentColor(argb: Int)
+    fun setAutoDeleteByTimeEnabled(enabled: Boolean)
+    fun setAutoDeleteByTimeValue(value: Int)
+    fun setAutoDeleteByTimeUnit(unit: String)
+    fun setAutoDeleteBySpaceEnabled(enabled: Boolean)
+    fun setAutoDeleteBySpaceValue(value: Int)
+    fun setAutoDeleteBySpaceUnit(unit: String)
+    fun setAutoUpdateCheckEnabled(enabled: Boolean)
 }
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application), SettingsActions {
@@ -67,11 +74,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     override fun getAppVersion(): String {
         return try {
+            @Suppress("DEPRECATION")
             val packageInfo = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
             val base = "Version ${packageInfo.versionName} (${packageInfo.longVersionCode})"
             val ciBuild = BuildConfig.CI_BUILD_NUMBER
             if (ciBuild.lowercase() == "local") "$base - Local Build" else "$base - CI Run #$ciBuild"
         } catch (_: android.content.pm.PackageManager.NameNotFoundException) { "Unknown Version" }
+    }
+
+    /** Returns only the raw version name (e.g. "1.2.3") for update comparison. */
+    fun getRawVersionName(): String {
+        return try {
+            @Suppress("DEPRECATION")
+            appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName ?: "0"
+        } catch (_: Exception) { "0" }
     }
 
     fun refresh() { _updateTrigger.update { it + 1 } }
@@ -101,6 +117,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     override fun setShowToastsEnabled(enabled: Boolean) { preferences.setShowToastsEnabled(enabled); refresh() }
     override fun setRecordOnAnswer(enabled: Boolean) { preferences.setRecordOnAnswerEnabled(enabled); refresh() }
     override fun setAccentColor(argb: Int) { preferences.setAccentColor(argb); refresh() }
+    override fun setAutoDeleteByTimeEnabled(enabled: Boolean)  { preferences.setAutoDeleteByTimeEnabled(enabled); refresh() }
+    override fun setAutoDeleteByTimeValue(value: Int)          { preferences.setAutoDeleteByTimeValue(value); refresh() }
+    override fun setAutoDeleteByTimeUnit(unit: String)         { preferences.setAutoDeleteByTimeUnit(unit); refresh() }
+    override fun setAutoDeleteBySpaceEnabled(enabled: Boolean) { preferences.setAutoDeleteBySpaceEnabled(enabled); refresh() }
+    override fun setAutoDeleteBySpaceValue(value: Int)         { preferences.setAutoDeleteBySpaceValue(value); refresh() }
+    override fun setAutoDeleteBySpaceUnit(unit: String)        { preferences.setAutoDeleteBySpaceUnit(unit); refresh() }
+    override fun setAutoUpdateCheckEnabled(enabled: Boolean)   { preferences.setAutoUpdateCheckEnabled(enabled); refresh() }
     override fun setAppLanguage(languageCode: String) {
         val localeList = if (languageCode.isEmpty()) LocaleListCompat.getEmptyLocaleList()
                          else LocaleListCompat.forLanguageTags(languageCode)

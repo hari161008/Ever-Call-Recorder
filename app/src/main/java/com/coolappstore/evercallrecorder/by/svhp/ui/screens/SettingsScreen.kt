@@ -33,6 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.coolappstore.evercallrecorder.by.svhp.R
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
 import com.coolappstore.evercallrecorder.by.svhp.integrations.scrcpy.ScrcpyAudioCodec
@@ -148,9 +150,10 @@ fun SettingsContent(
                 Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Spacer(Modifier.height(8.dp))
                     // ORDER: Updates → Appearance → Recording → Audio → Security → Languages → About → Debug
-                    UpdatesSection(actions)
+                    UpdatesSection(preferences, updateTrigger, actions)
                     AppearanceSection(preferences, updateTrigger, actions)
                     RecordingSection(preferences, updateTrigger, actions, onSelectFolder, onOpenContactsIncoming, onOpenContactsOutgoing)
+                    AutoDeleteSection(preferences, updateTrigger, actions)
                     AudioSection(preferences, updateTrigger, actions)
                     SecuritySection(preferences, updateTrigger, actions)
                     LanguagesSection(preferences, updateTrigger, actions)
@@ -191,42 +194,363 @@ fun SettingsContent(
 
 // ── Updates section ───────────────────────────────────────────────────────────
 
-@Composable
-private fun UpdatesSection(actions: SettingsActions) {
-    val context = LocalContext.current
-    var updateStatus by remember { mutableStateOf<String?>(null) }
-    var isChecking by remember { mutableStateOf(false) }
+private sealed class UpdateState {
+    object Idle                                                              : UpdateState()
+    object Checking                                                          : UpdateState()
+    object UpToDate                                                          : UpdateState()
+    data class UpdateAvailable(val version: String, val apkUrl: String?)     : UpdateState()
+    data class Downloading(val version: String, val progress: Float)         : UpdateState()
+    object Installing                                                        : UpdateState()
+    object Error                                                             : UpdateState()
+}
 
-    SettingsSection(title = stringResource(R.string.settings_section_updates), icon = Icons.Outlined.SystemUpdate) {
-        SectionListItem(
-            icon = Icons.Outlined.Info,
-            headline = actions.getAppVersion(),
-            supporting = stringResource(R.string.settings_updates_description)
-        )
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (updateStatus != null) {
-                Text(
-                    text = updateStatus!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-            }
-            Button(
-                onClick = { context.openGithub(); isChecking = false; updateStatus = context.getString(R.string.settings_updates_up_to_date) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                enabled = !isChecking
-            ) {
-                if (isChecking) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
+@Composable
+private fun UpdatesSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
+    val context           = LocalContext.current
+    val scope             = rememberCoroutineScope()
+    val appVersion        = remember { actions.getAppVersion() }
+    var autoUpdateEnabled by remember(updateTrigger) { mutableStateOf(preferences.isAutoUpdateCheckEnabled()) }
+    var updateState       by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+
+    // Checks GitHub and stops at UpdateAvailable for user confirmation (or skips to install if cached)
+    fun checkForUpdates() {
+        if (updateState is UpdateState.Checking || updateState is UpdateState.Downloading) return
+        scope.launch {
+            updateState = UpdateState.Checking
+            val release = com.coolappstore.evercallrecorder.by.svhp.system.fetchLatestRelease(
+                com.coolappstore.evercallrecorder.by.svhp.AppUrls.GITHUB_API_RELEASES
+            )
+            val currentRaw = Regex("""(\d+\.\d+[.\d]*)""").find(appVersion)?.value ?: "0"
+            when {
+                release == null -> updateState = UpdateState.Error
+                !com.coolappstore.evercallrecorder.by.svhp.system.isNewerVersion(release.tagName, currentRaw) ->
+                    updateState = UpdateState.UpToDate
+                com.coolappstore.evercallrecorder.by.svhp.system.isApkReadyToInstall(context, release.tagName) -> {
+                    // Already downloaded for this version — go straight to install
+                    updateState = UpdateState.Installing
+                    com.coolappstore.evercallrecorder.by.svhp.system.installApkAndScheduleDelete(
+                        context, com.coolappstore.evercallrecorder.by.svhp.system.getApkDestinationFile()
+                    )
+                    kotlinx.coroutines.delay(2_000)
+                    updateState = UpdateState.Idle
                 }
-                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.settings_updates_check))
+                else -> {
+                    // Show confirmation card — download starts only after user taps Download
+                    updateState = UpdateState.UpdateAvailable(release.tagName, release.apkUrl)
+                }
             }
         }
+    }
+
+    // Called when user confirms the download from the UpdateAvailable card
+    fun startDownload(version: String, apkUrl: String?) {
+        if (apkUrl == null) { updateState = UpdateState.Error; return }
+        scope.launch {
+            val downloadId = com.coolappstore.evercallrecorder.by.svhp.system.enqueueApkDownload(context, apkUrl)
+            if (downloadId == null) { updateState = UpdateState.Error; return@launch }
+
+            updateState = UpdateState.Downloading(version, 0f)
+
+            val dm = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            while (true) {
+                kotlinx.coroutines.delay(350)
+                val query  = android.app.DownloadManager.Query().setFilterById(downloadId)
+                val cursor = dm.query(query)
+                if (!cursor.moveToFirst()) { cursor.close(); updateState = UpdateState.Error; break }
+                val status     = cursor.getInt(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_STATUS))
+                val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val total      = cursor.getLong(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                cursor.close()
+                when (status) {
+                    android.app.DownloadManager.STATUS_SUCCESSFUL -> {
+                        com.coolappstore.evercallrecorder.by.svhp.system.saveDownloadedVersion(context, version)
+                        updateState = UpdateState.Installing
+                        com.coolappstore.evercallrecorder.by.svhp.system.installApkAndScheduleDelete(
+                            context, com.coolappstore.evercallrecorder.by.svhp.system.getApkDestinationFile()
+                        )
+                        kotlinx.coroutines.delay(2_000)
+                        updateState = UpdateState.Idle
+                        break
+                    }
+                    android.app.DownloadManager.STATUS_FAILED -> { updateState = UpdateState.Error; break }
+                    else -> {
+                        val prog = if (total > 0L) (downloaded.toFloat() / total).coerceIn(0f, 1f) else 0f
+                        if (updateState is UpdateState.Downloading)
+                            updateState = (updateState as UpdateState.Downloading).copy(progress = prog)
+                    }
+                }
+            }
+        }
+    }
+
+    SettingsSection(title = stringResource(R.string.settings_section_updates), icon = Icons.Outlined.SystemUpdate) {
+
+        // ── Version hero card ──────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.SystemUpdate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Ever Call Recorder",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        Regex("""(\\d+\\.\\d+[.\\d]*)""").find(appVersion)?.value?.let { "Version $it" } ?: appVersion,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                    )
+                }
+            }
+        }
+
+        // ── Animated update status card ────────────────────────────────────
+        AnimatedContent(
+            targetState = updateState,
+            transitionSpec = {
+                (fadeIn(tween(320, easing = FastOutSlowInEasing)) +
+                 scaleIn(tween(320, easing = FastOutSlowInEasing), initialScale = 0.94f))
+                    .togetherWith(fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.94f))
+            },
+            label = "updateStatus"
+        ) { state ->
+            when (state) {
+                is UpdateState.Idle -> {
+                    Box(modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Button(
+                            onClick = { checkForUpdates() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(vertical = 14.dp)
+                        ) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Check for Updates", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+
+                is UpdateState.Checking -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                        Column {
+                            Text("Checking for updates", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Text("Connecting to GitHub…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                is UpdateState.UpToDate -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                            .clickable { checkForUpdates() }
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("You\'re up to date!", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                            Text("Tap to check again", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                is UpdateState.UpdateAvailable -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Outlined.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("v${state.version} Available", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                                Text("New version ready to download", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { updateState = UpdateState.Idle },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("Not Now") }
+                            Button(
+                                onClick = { startDownload(state.version, state.apkUrl) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.Download, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Download")
+                            }
+                        }
+                    }
+                }
+
+                is UpdateState.Downloading -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                            Column {
+                                Text("Downloading v${state.version}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                Text("Installing automatically after download", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier.fillMaxWidth().clip(CircleShape),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text("${if (state.progress > 0f) "%.1f MB downloaded".format(state.progress * 50) else "Starting…"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                is UpdateState.Installing -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp, color = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Opening installer…", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                            Text("Follow the on-screen instructions to complete", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                is UpdateState.Error -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                            .clickable { checkForUpdates() }
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Outlined.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Check failed", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                            Text("Tap to retry", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Rounded.Refresh, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+        ToggleListItem(
+            label = "Auto Check For Updates",
+            checked = autoUpdateEnabled,
+            description = "Automatically check for updates when the app opens",
+            onCheckedChange = {
+                autoUpdateEnabled = it
+                actions.setAutoUpdateCheckEnabled(it)
+            }
+        )
         Spacer(Modifier.height(4.dp))
     }
 }
@@ -619,6 +943,150 @@ private fun RecordingSection(
     }
 }
 
+// ── Auto Delete section ───────────────────────────────────────────────────────
+
+@Composable
+private fun AutoDeleteSection(preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions) {
+    var timeEnabled  by remember(updateTrigger) { mutableStateOf(preferences.isAutoDeleteByTimeEnabled()) }
+    var timeValue    by remember(updateTrigger) { mutableStateOf(preferences.getAutoDeleteByTimeValue().toString()) }
+    var timeUnit     by remember(updateTrigger) { mutableStateOf(preferences.getAutoDeleteByTimeUnit()) }
+    var spaceEnabled by remember(updateTrigger) { mutableStateOf(preferences.isAutoDeleteBySpaceEnabled()) }
+    var spaceValue   by remember(updateTrigger) { mutableStateOf(preferences.getAutoDeleteBySpaceValue().toString()) }
+    var spaceUnit    by remember(updateTrigger) { mutableStateOf(preferences.getAutoDeleteBySpaceUnit()) }
+
+    SettingsSection(title = "Auto Delete", icon = Icons.Outlined.DeleteSweep) {
+
+        // ── Time-based sub-section ─────────────────────────────────────────
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Outlined.Timer, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(13.dp)) }
+                Text("Auto Delete With Respect To Time", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = timeEnabled,
+                    onCheckedChange = { timeEnabled = it; actions.setAutoDeleteByTimeEnabled(it) },
+                    modifier = Modifier.scale(0.82f)
+                )
+            }
+            AnimatedVisibility(
+                visible = timeEnabled,
+                enter = expandVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(220)),
+                exit  = shrinkVertically(tween(180)) + fadeOut(tween(140))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp, bottom = 4.dp)) {
+                    Text("Delete recordings older than:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = timeValue,
+                            onValueChange = { v ->
+                                val d = v.filter { it.isDigit() }.take(5)
+                                timeValue = d
+                                d.toIntOrNull()?.let { actions.setAutoDeleteByTimeValue(it) }
+                            },
+                            modifier = Modifier.width(88.dp),
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            shape = RoundedCornerShape(14.dp),
+                            label = { Text("Amount", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("hours", "days").forEach { opt ->
+                                val sel = timeUnit == opt
+                                Surface(
+                                    onClick = { timeUnit = opt; actions.setAutoDeleteByTimeUnit(opt) },
+                                    shape = CircleShape,
+                                    color = if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = if (sel) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                                    modifier = Modifier.height(40.dp)
+                                ) {
+                                    Box(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), Alignment.Center) {
+                                        Text(opt.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelMedium, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal, color = if (sel) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (timeValue.toIntOrNull() != null && timeValue.isNotBlank()) {
+                        Text("Recordings older than $timeValue ${timeUnit} will be deleted on next app open", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+        // ── Space-based sub-section ────────────────────────────────────────
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(13.dp)) }
+                Text("Auto Delete With Respect To Space", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = spaceEnabled,
+                    onCheckedChange = { spaceEnabled = it; actions.setAutoDeleteBySpaceEnabled(it) },
+                    modifier = Modifier.scale(0.82f)
+                )
+            }
+            AnimatedVisibility(
+                visible = spaceEnabled,
+                enter = expandVertically(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(220)),
+                exit  = shrinkVertically(tween(180)) + fadeOut(tween(140))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp, bottom = 4.dp)) {
+                    Text("Delete oldest recordings when folder exceeds:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = spaceValue,
+                            onValueChange = { v ->
+                                val d = v.filter { it.isDigit() }.take(6)
+                                spaceValue = d
+                                d.toIntOrNull()?.let { actions.setAutoDeleteBySpaceValue(it) }
+                            },
+                            modifier = Modifier.width(96.dp),
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            shape = RoundedCornerShape(14.dp),
+                            label = { Text("Size", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("mb", "gb").forEach { opt ->
+                                val sel = spaceUnit == opt
+                                Surface(
+                                    onClick = { spaceUnit = opt; actions.setAutoDeleteBySpaceUnit(opt) },
+                                    shape = CircleShape,
+                                    color = if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = if (sel) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                                    modifier = Modifier.height(40.dp)
+                                ) {
+                                    Box(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), Alignment.Center) {
+                                        Text(opt.uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal, color = if (sel) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (spaceValue.toIntOrNull() != null && spaceValue.isNotBlank()) {
+                        Text("Oldest recordings deleted when folder exceeds $spaceValue ${spaceUnit.uppercase()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
 // ── Audio section ─────────────────────────────────────────────────────────────
 
 @Composable
@@ -830,6 +1298,13 @@ private fun SettingsScreenPreview() {
             override fun setFileNameTemplate(template: String) {}
             override fun setRecordOnAnswer(enabled: Boolean) {}
             override fun setAccentColor(argb: Int) {}
+            override fun setAutoDeleteByTimeEnabled(enabled: Boolean) {}
+            override fun setAutoDeleteByTimeValue(value: Int) {}
+            override fun setAutoDeleteByTimeUnit(unit: String) {}
+            override fun setAutoDeleteBySpaceEnabled(enabled: Boolean) {}
+            override fun setAutoDeleteBySpaceValue(value: Int) {}
+            override fun setAutoDeleteBySpaceUnit(unit: String) {}
+            override fun setAutoUpdateCheckEnabled(enabled: Boolean) {}
         }
         SettingsContent(preferences = dummyPreferences, updateTrigger = 0, actions = dummyActions, contactPickerState = null, onSelectFolder = {}, onOpenContactsIncoming = {}, onOpenContactsOutgoing = {}, onConfirmContacts = {}, onDismissContacts = {}, onExportLogs = {}, onBack = {})
     }
