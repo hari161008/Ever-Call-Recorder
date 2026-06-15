@@ -203,28 +203,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val dir = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
         if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
 
+        val template = preferences.getFileNameTemplate()
+
         dir.listFiles()
             .filter { it.isFile && it.name != null }
             .mapNotNull { file ->
                 val name     = file.name ?: return@mapNotNull null
                 val ext      = name.substringAfterLast('.', "")
                 val baseName = name.substringBeforeLast('.')
-                val parts     = baseName.split("_")
-                val direction = if (parts.size >= 3) parts[2] else ""
-                val phoneRaw  = if (parts.size >= 4) parts.drop(3).joinToString("_") else ""
-                val dateRaw   = if (parts.size >= 2) "${parts[0]}_${parts[1]}" else ""
-                val date        = parseDate(dateRaw)
-                val phoneNumber = phoneRaw.trim().ifBlank { "Unknown" }
-                val contactName = if (phoneNumber != "Unknown") resolveContactName(context, phoneNumber) else null
-                val noteText    = notesPrefs.getString(file.uri.toString(), "") ?: ""
-                val fileSize    = file.length()
-                val durationMs  = resolveAudioDuration(context, file.uri, fileSize)
+                val parsed   = parseFilenameWithTemplate(baseName, template)
+                val date        = parseDate(parsed.dateStr)
+                val phoneNumber = parsed.phoneNumber.trim().ifBlank { "Unknown" }
+                // Prefer contact name embedded in filename (if template uses {contact_name}),
+                // then fall back to a live contacts-db lookup.
+                val contactFromFile = if (template.contains("{contact_name}"))
+                    parsed.contactName.ifBlank { null } else null
+                val contactName = if (phoneNumber != "Unknown")
+                    contactFromFile ?: resolveContactName(context, phoneNumber)
+                else null
+                val noteText = notesPrefs.getString(file.uri.toString(), "") ?: ""
+                val fileSize = file.length()
+                val durationMs = resolveAudioDuration(context, file.uri, fileSize)
                 RecordingItem(
                     uri         = file.uri,
                     displayName = name,
                     phoneNumber = phoneNumber,
                     contactName = contactName,
-                    direction   = direction,
+                    direction   = parsed.direction,
                     date        = date,
                     sizeBytes   = fileSize,
                     durationMs  = durationMs,
@@ -233,6 +238,91 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     noteText    = noteText
                 )
             }
+    }
+
+    // ── Template-aware filename parser ────────────────────────────────────────
+
+    private data class ParsedFilename(
+        val direction   : String,
+        val phoneNumber : String,
+        val dateStr     : String,
+        val contactName : String
+    )
+
+    /**
+     * Parses a recording filename base-name using the user's configured template.
+     *
+     * Converts each placeholder into a regex capture group so the parser works correctly
+     * regardless of field order or extra fields in the template.
+     *
+     * Falls back to a heuristic approach when the regex doesn't match (e.g. legacy files).
+     */
+    private fun parseFilenameWithTemplate(baseName: String, template: String): ParsedFilename {
+        val fieldOrder  = mutableListOf<String>()
+        val patternSb   = StringBuilder("^")
+        var i = 0
+        while (i < template.length) {
+            val rem = template.substring(i)
+            when {
+                rem.startsWith("{date}") -> {
+                    patternSb.append("""(\d{8}_\d{6}(?:\.\d{3}[+-]\d{4})?)""")
+                    fieldOrder.add("date"); i += "{date}".length
+                }
+                rem.startsWith("{direction}") -> {
+                    patternSb.append("(in|out)")
+                    fieldOrder.add("direction"); i += "{direction}".length
+                }
+                rem.startsWith("{phone_number}") -> {
+                    patternSb.append("""([+\d()\s.\-]*)""")
+                    fieldOrder.add("phone"); i += "{phone_number}".length
+                }
+                rem.startsWith("{contact_name}") -> {
+                    patternSb.append("(.+?)")
+                    fieldOrder.add("contact"); i += "{contact_name}".length
+                }
+                rem.startsWith("{cross_country}") -> {
+                    patternSb.append("(?:true|false)")
+                    i += "{cross_country}".length
+                }
+                else -> {
+                    val ch = template[i]
+                    patternSb.append(if (ch in """\\.+*?[](){}|^$""") "\\$ch" else ch.toString())
+                    i++
+                }
+            }
+        }
+        patternSb.append("$")
+
+        val match = Regex(patternSb.toString()).find(baseName)
+        if (match != null) {
+            val vals = fieldOrder.zip(match.groupValues.drop(1)).toMap()
+            return ParsedFilename(
+                direction   = vals["direction"]  ?: "",
+                phoneNumber = vals["phone"]?.trim()   ?: "",
+                dateStr     = vals["date"]         ?: "",
+                contactName = vals["contact"]?.trim() ?: ""
+            )
+        }
+
+        // Fallback heuristic for files that don't match the current template
+        return parseFilenameHeuristic(baseName)
+    }
+
+    /** Best-effort parser for filenames whose template is unknown or has changed. */
+    private fun parseFilenameHeuristic(baseName: String): ParsedFilename {
+        val direction = when {
+            Regex("(^|_)in($|_)").containsMatchIn(baseName)  -> "in"
+            Regex("(^|_)out($|_)").containsMatchIn(baseName) -> "out"
+            else -> ""
+        }
+        val dateMatch = Regex("""\d{8}_\d{6}(?:\.\d{3}[+-]\d{4})?""").find(baseName)
+        val dateStr   = dateMatch?.value ?: ""
+        // Phone: segment immediately after direction (if direction found)
+        val parts  = baseName.split("_")
+        val dirIdx = parts.indexOfFirst { it == "in" || it == "out" }
+        val phone  = if (dirIdx in 0 until parts.lastIndex)
+            parts.subList(dirIdx + 1, parts.size).joinToString("_") else ""
+        return ParsedFilename(direction, phone, dateStr, "")
     }
 
     private fun parseDate(raw: String): Date? {
