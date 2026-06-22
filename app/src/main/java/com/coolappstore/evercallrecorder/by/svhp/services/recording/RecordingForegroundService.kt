@@ -16,7 +16,7 @@ import android.os.Build
 import android.os.IBinder
 import android.content.pm.ServiceInfo
 import android.provider.CallLog
-import androidx.documentfile.provider.DocumentFile
+import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import com.coolappstore.evercallrecorder.by.svhp.integrations.shizuku.ShizukuConnectionManager
 import com.coolappstore.evercallrecorder.by.svhp.IShellService
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
@@ -370,8 +370,7 @@ class RecordingForegroundService : Service() {
                     val updatedMeta = originalMetadata.copy(rawPhoneNumber = finalNumber)
                     val newName = RecordingFileNameFormatter.formatFileName(applicationContext, updatedMeta, activeSession.currentCodecEnum)
                     try {
-                        DocumentFile.fromSingleUri(applicationContext, uriToRename)
-                            ?.renameTo(newName)
+                        SafHelper.renameRecording(applicationContext, uriToRename, newName)
                         AppLogger.d(TAG, "Successfully renamed wrongly detected anonymous recording to: $newName")
                     } catch (e: Exception) {
                         AppLogger.e(TAG, "Failed to rename file using CallLog fallback", e)

@@ -129,8 +129,17 @@
     <string name="settings_shizuku_keep_alive_desc">Do not send the stop intent</string>
 
     <!-- Settings Screen: Recording Section -->
-    <string name="settings_tap_to_select_folder">Tap to select folder...</string>
-    <string name="settings_recording_folder_label">Recording Folder</string>
+    <string name="settings_tap_to_select_folder">Tap to choose storage…</string>
+    <string name="settings_recording_folder_label">Recording Storage</string>
+    <string name="storage_mode_private_label">Private app storage</string>
+
+    <!-- Storage location choice popup (shown on first-time setup and from Settings) -->
+    <string name="storage_choice_title">Choose Recording Storage</string>
+    <string name="storage_choice_description">Pick where your call recordings should be saved. You can change this anytime in Settings.</string>
+    <string name="storage_choice_folder_title">Choose a Folder</string>
+    <string name="storage_choice_folder_description">Pick a folder on your device. Recordings can be browsed and shared with any file manager.</string>
+    <string name="storage_choice_private_title">Save Privately In-App</string>
+    <string name="storage_choice_private_description">Recordings stay inside Ever Call Recorder\'s own private storage, for extra privacy. Only this app can access them.</string>
 
     <string name="settings_file_name_template">File Name Template</string>
     <string name="settings_file_name_template_placeholders">Placeholders:</string>

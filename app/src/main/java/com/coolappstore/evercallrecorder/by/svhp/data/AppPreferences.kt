@@ -27,9 +27,10 @@ class AppPreferences(context: Context) {
     object DefaultsValue {
         const val DISCLAIMER_ACCEPTED = false
         val RECORDING_FOLDER_URI: String? = null
+        val STORAGE_MODE: String? = null
         const val VIBRATION_ENABLED = true
-        const val AUTO_RECORD_INCOMING = false
-        const val AUTO_RECORD_OUTGOING = false
+        const val AUTO_RECORD_INCOMING = true
+        const val AUTO_RECORD_OUTGOING = true
         const val RECORD_ON_ANSWER = true
         const val IGNORE_ANONYMOUS_INCOMING = false
         const val IGNORE_CROSS_COUNTRY_INCOMING = false
@@ -62,11 +63,18 @@ class AppPreferences(context: Context) {
         const val AUTO_DELETE_BY_SPACE_VALUE   = 500
         const val AUTO_DELETE_BY_SPACE_UNIT    = "mb"    // "mb" | "gb"
         const val AUTO_UPDATE_CHECK            = true
+        const val WELCOME_SHOWN                = false
+        // App lock defaults
+        const val APP_LOCK_ENABLED = false
+        val APP_LOCK_METHOD = AppLockMethod.NONE
+        val APP_LOCK_SECRET_HASH: String? = null
+        val APP_LOCK_SALT: String? = null
     }
 
     enum class Key(val id: String) {
         DISCLAIMER_ACCEPTED("disclaimer_accepted"),
         RECORDING_FOLDER_URI("recording_folder_uri"),
+        STORAGE_MODE("storage_mode"),
         VIBRATION_ENABLED("vibration_enabled"),
         AUTO_RECORD_INCOMING("auto_record_incoming"),
         AUTO_RECORD_OUTGOING("auto_record_outgoing"),
@@ -99,7 +107,12 @@ class AppPreferences(context: Context) {
         AUTO_DELETE_BY_SPACE_ENABLED("auto_delete_by_space_enabled"),
         AUTO_DELETE_BY_SPACE_VALUE("auto_delete_by_space_value"),
         AUTO_DELETE_BY_SPACE_UNIT("auto_delete_by_space_unit"),
-        AUTO_UPDATE_CHECK("auto_update_check");
+        AUTO_UPDATE_CHECK("auto_update_check"),
+        WELCOME_SHOWN("welcome_shown"),
+        APP_LOCK_ENABLED("app_lock_enabled"),
+        APP_LOCK_METHOD("app_lock_method"),
+        APP_LOCK_SECRET_HASH("app_lock_secret_hash"),
+        APP_LOCK_SALT("app_lock_salt");
     }
 
     enum class IgnoreContactsMode(val key: String) {
@@ -110,11 +123,41 @@ class AppPreferences(context: Context) {
         }
     }
 
+    /**
+     * Where call recordings are written to.
+     *
+     * - [SAF_FOLDER] - a user-chosen folder, accessed through the Storage Access Framework.
+     *   Recordings can be browsed and shared with any file manager.
+     * - [PRIVATE]    - the app's own private internal storage. Only this app can access these
+     *   files (no other app, and no file manager, can read them without root), offering extra privacy.
+     */
+    enum class StorageMode(val key: String) {
+        SAF_FOLDER("saf_folder"), PRIVATE("private");
+        companion object {
+            fun fromKey(key: String?): StorageMode? = entries.firstOrNull { it.key == key }
+        }
+    }
+
     enum class ThemeMode(val key: String) {
         SYSTEM("system"), LIGHT("light"), DARK("dark"), WHITE("white"), BLACK("black"), AUTO_WB("auto_wb");
         companion object {
             fun fromKey(key: String?): ThemeMode =
                 entries.firstOrNull { it.key == key } ?: throw IllegalArgumentException("Unknown ThemeMode key: $key")
+        }
+    }
+
+    /**
+     * How the App Lock screen verifies it is really the owner opening the app.
+     *
+     * - [NONE]      - App Lock is disabled, the app opens straight to the home screen.
+     * - [PIN]       - A numeric code (4 or more digits) chosen by the user.
+     * - [PASSWORD]  - An alphanumeric password chosen by the user.
+     * - [BIOMETRIC] - The device's own fingerprint/face unlock, via [androidx.biometric].
+     */
+    enum class AppLockMethod(val key: String) {
+        NONE("none"), PIN("pin"), PASSWORD("password"), BIOMETRIC("biometric");
+        companion object {
+            fun fromKey(key: String?): AppLockMethod = entries.firstOrNull { it.key == key } ?: NONE
         }
     }
 
@@ -133,6 +176,22 @@ class AppPreferences(context: Context) {
     fun setDisclaimerAccepted(accepted: Boolean) = setBoolean(Key.DISCLAIMER_ACCEPTED, accepted)
     fun getRecordingFolderUri(): Uri? = getString(Key.RECORDING_FOLDER_URI, DefaultsValue.RECORDING_FOLDER_URI)?.toUri()
     fun setRecordingFolderUri(uri: Uri?) = setString(Key.RECORDING_FOLDER_URI, uri?.toString())
+    /**
+     * Returns the user's chosen [StorageMode] for recordings, or null if they have not made a
+     * choice yet (e.g. a fresh install that has not completed onboarding's storage step).
+     *
+     * For backward compatibility with installs from before this setting existed: if no mode was
+     * explicitly chosen but a SAF recording folder URI is already saved, this returns
+     * [StorageMode.SAF_FOLDER] automatically so existing users are not asked again.
+     */
+    fun getStorageMode(): StorageMode? {
+        val stored = StorageMode.fromKey(getString(Key.STORAGE_MODE, DefaultsValue.STORAGE_MODE))
+        if (stored != null) return stored
+        return if (getRecordingFolderUri() != null) StorageMode.SAF_FOLDER else null
+    }
+    fun setStorageMode(mode: StorageMode) = setString(Key.STORAGE_MODE, mode.key)
+    /** True if the user chose to keep recordings in the app's own private internal storage. */
+    fun isPrivateStorageEnabled() = getStorageMode() == StorageMode.PRIVATE
     fun isVibrationEnabled() = getBoolean(Key.VIBRATION_ENABLED, DefaultsValue.VIBRATION_ENABLED)
     fun setVibrationEnabled(enabled: Boolean) = setBoolean(Key.VIBRATION_ENABLED, enabled)
     fun isAutoRecordIncomingEnabled() = getBoolean(Key.AUTO_RECORD_INCOMING, DefaultsValue.AUTO_RECORD_INCOMING)
@@ -205,4 +264,53 @@ class AppPreferences(context: Context) {
     fun setAutoDeleteBySpaceUnit(unit: String) = setString(Key.AUTO_DELETE_BY_SPACE_UNIT, unit)
     fun isAutoUpdateCheckEnabled() = getBoolean(Key.AUTO_UPDATE_CHECK, DefaultsValue.AUTO_UPDATE_CHECK)
     fun setAutoUpdateCheckEnabled(enabled: Boolean) = setBoolean(Key.AUTO_UPDATE_CHECK, enabled)
+    fun isWelcomeShown() = getBoolean(Key.WELCOME_SHOWN, DefaultsValue.WELCOME_SHOWN)
+    fun setWelcomeShown(shown: Boolean) = setBoolean(Key.WELCOME_SHOWN, shown)
+
+    // ── App Lock ──────────────────────────────────────────────────────────────
+    /** Whether the App Lock screen should gate access to the app. */
+    fun isAppLockEnabled() = getBoolean(Key.APP_LOCK_ENABLED, DefaultsValue.APP_LOCK_ENABLED)
+    /** The currently configured unlock method (meaningless when App Lock is disabled). */
+    fun getAppLockMethod(): AppLockMethod = AppLockMethod.fromKey(getString(Key.APP_LOCK_METHOD, DefaultsValue.APP_LOCK_METHOD.key))
+
+    /**
+     * Enables App Lock with the [AppLockMethod.PIN] or [AppLockMethod.PASSWORD] method, hashing
+     * and storing [secret] with a freshly generated salt. The plaintext secret is never persisted.
+     */
+    fun setAppLockSecret(method: AppLockMethod, secret: String) {
+        val salt = com.coolappstore.evercallrecorder.by.svhp.utils.AppLockCrypto.generateSalt()
+        val hash = com.coolappstore.evercallrecorder.by.svhp.utils.AppLockCrypto.hash(secret, salt)
+        setString(Key.APP_LOCK_SALT, salt)
+        setString(Key.APP_LOCK_SECRET_HASH, hash)
+        setString(Key.APP_LOCK_METHOD, method.key)
+        setBoolean(Key.APP_LOCK_ENABLED, true)
+    }
+
+    /** Enables App Lock with [AppLockMethod.BIOMETRIC]. No secret needs to be stored. */
+    fun setAppLockBiometric() {
+        setString(Key.APP_LOCK_SALT, null)
+        setString(Key.APP_LOCK_SECRET_HASH, null)
+        setString(Key.APP_LOCK_METHOD, AppLockMethod.BIOMETRIC.key)
+        setBoolean(Key.APP_LOCK_ENABLED, true)
+    }
+
+    /** Disables App Lock and wipes any stored PIN/password hash and salt. */
+    fun clearAppLock() {
+        setBoolean(Key.APP_LOCK_ENABLED, false)
+        setString(Key.APP_LOCK_METHOD, AppLockMethod.NONE.key)
+        setString(Key.APP_LOCK_SECRET_HASH, null)
+        setString(Key.APP_LOCK_SALT, null)
+    }
+
+    /**
+     * Checks [secret] (a typed-in PIN or password) against the stored hash.
+     * Always returns false when App Lock isn't using [AppLockMethod.PIN] or [AppLockMethod.PASSWORD].
+     */
+    fun verifyAppLockSecret(secret: String): Boolean {
+        val method = getAppLockMethod()
+        if (method != AppLockMethod.PIN && method != AppLockMethod.PASSWORD) return false
+        val hash = getString(Key.APP_LOCK_SECRET_HASH, DefaultsValue.APP_LOCK_SECRET_HASH) ?: return false
+        val salt = getString(Key.APP_LOCK_SALT, DefaultsValue.APP_LOCK_SALT) ?: return false
+        return com.coolappstore.evercallrecorder.by.svhp.utils.AppLockCrypto.verify(secret, salt, hash)
+    }
 }

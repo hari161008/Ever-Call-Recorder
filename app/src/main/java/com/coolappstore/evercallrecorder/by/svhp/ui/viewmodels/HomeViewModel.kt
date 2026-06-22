@@ -7,10 +7,12 @@ import android.net.Uri
 import android.provider.ContactsContract
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
+import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,7 +122,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val toDelete = selectedUris.value.toSet()
             toDelete.forEach { uri ->
-                runCatching { DocumentFile.fromSingleUri(context, uri)?.delete() }
+                runCatching { SafHelper.deleteRecording(context, uri) }
                 notesPrefs.edit().remove(uri.toString()).apply()
                 favPrefs.edit().remove(uri.toString()).apply()
             }
@@ -145,7 +147,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteRecording(context: Context, item: RecordingItem) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                DocumentFile.fromSingleUri(context, item.uri)?.delete()
+                SafHelper.deleteRecording(context, item.uri)
             }
             notesPrefs.edit().remove(item.uri.toString()).apply()
             favPrefs.edit().remove(item.uri.toString()).apply()
@@ -158,6 +160,59 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getNote(uri: Uri)                = notesPrefs.getString(uri.toString(), "") ?: ""
     fun saveNote(uri: Uri, note: String) = notesPrefs.edit().putString(uri.toString(), note).apply()
+
+    /**
+     * Copies the currently selected recordings into [destinationFolderUri], a SAF folder picked
+     * by the user specifically for this export. Works regardless of the configured storage mode
+     * (SAF folder or private app storage) since it reads through the standard [ContentResolver],
+     * which both [RecordingItem.uri] sources support. This is the only way to get a copy of a
+     * privately-stored recording into a location any file manager (or other app) can reach.
+     */
+    fun saveSelectedToFolder(context: Context, destinationFolderUri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val toSave      = selectedUris.value.toSet()
+            val itemsByUri  = _allRecordings.value.associateBy { it.uri }
+            val destDir     = DocumentFile.fromTreeUri(context, destinationFolderUri)
+            var successCount = 0
+            var failureCount = 0
+
+            if (destDir != null && destDir.exists() && destDir.canWrite()) {
+                toSave.forEach { uri ->
+                    val item = itemsByUri[uri]
+                    val name = item?.displayName?.takeIf { it.isNotBlank() } ?: (uri.lastPathSegment ?: "recording_${System.currentTimeMillis()}")
+                    val mime = context.contentResolver.getType(uri) ?: "audio/*"
+                    try {
+                        val targetFile = destDir.createFile(mime, name)
+                        if (targetFile != null) {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                context.contentResolver.openOutputStream(targetFile.uri)?.use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            successCount++
+                        } else {
+                            failureCount++
+                        }
+                    } catch (e: Exception) {
+                        failureCount++
+                    }
+                }
+            } else {
+                failureCount = toSave.size
+            }
+
+            withContext(Dispatchers.Main) {
+                if (preferences.isShowToastsEnabled()) {
+                    val message = when {
+                        successCount == 0 -> "Failed to save recordings"
+                        failureCount == 0 -> "Saved $successCount recording${if (successCount != 1) "s" else ""}"
+                        else              -> "Saved $successCount, failed to save $failureCount"
+                    }
+                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     private fun isFavourite(uri: Uri) = favPrefs.getBoolean(uri.toString(), false)
 
@@ -197,47 +252,69 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         recordings.value = list
     }
 
-    private suspend fun fetchRecordings(): List<RecordingItem> = withContext(Dispatchers.IO) {
-        val context   = getApplication<Application>()
-        val folderUri = preferences.getRecordingFolderUri() ?: return@withContext emptyList()
-        val dir = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
-        if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
+    /** Minimal description of a file on disk, used to unify SAF-folder and private-storage listings before mapping to [RecordingItem]. */
+    private data class RecordingFileEntry(val uri: Uri, val name: String, val length: Long)
 
+    private suspend fun fetchRecordings(): List<RecordingItem> = withContext(Dispatchers.IO) {
+        val context = getApplication<Application>()
         val template = preferences.getFileNameTemplate()
 
-        dir.listFiles()
-            .filter { it.isFile && it.name != null }
-            .mapNotNull { file ->
-                val name     = file.name ?: return@mapNotNull null
-                val ext      = name.substringAfterLast('.', "")
-                val baseName = name.substringBeforeLast('.')
-                val parsed   = parseFilenameWithTemplate(baseName, template)
-                val date        = parseDate(parsed.dateStr)
-                val phoneNumber = parsed.phoneNumber.trim().ifBlank { "Unknown" }
-                // Prefer contact name embedded in filename (if template uses {contact_name}),
-                // then fall back to a live contacts-db lookup.
-                val contactFromFile = if (template.contains("{contact_name}"))
-                    parsed.contactName.ifBlank { null } else null
-                val contactName = if (phoneNumber != "Unknown")
-                    contactFromFile ?: resolveContactName(context, phoneNumber)
-                else null
-                val noteText = notesPrefs.getString(file.uri.toString(), "") ?: ""
-                val fileSize = file.length()
-                val durationMs = resolveAudioDuration(context, file.uri, fileSize)
-                RecordingItem(
-                    uri         = file.uri,
-                    displayName = name,
-                    phoneNumber = phoneNumber,
-                    contactName = contactName,
-                    direction   = parsed.direction,
-                    date        = date,
-                    sizeBytes   = fileSize,
-                    durationMs  = durationMs,
-                    extension   = ext,
-                    isFavourite = isFavourite(file.uri),
-                    noteText    = noteText
-                )
+        val entries: List<RecordingFileEntry> = when (preferences.getStorageMode()) {
+            AppPreferences.StorageMode.PRIVATE -> {
+                val authority = SafHelper.getPrivateStorageAuthority(context)
+                SafHelper.getPrivateStorageDir(context).listFiles()
+                    ?.filter { it.isFile }
+                    ?.map { file ->
+                        RecordingFileEntry(
+                            uri    = FileProvider.getUriForFile(context, authority, file),
+                            name   = file.name,
+                            length = file.length()
+                        )
+                    }
+                    ?: emptyList()
             }
+            AppPreferences.StorageMode.SAF_FOLDER -> {
+                val folderUri = preferences.getRecordingFolderUri() ?: return@withContext emptyList()
+                val dir = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
+                if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
+                dir.listFiles()
+                    .filter { it.isFile && it.name != null }
+                    .map { file -> RecordingFileEntry(uri = file.uri, name = file.name!!, length = file.length()) }
+            }
+            null -> return@withContext emptyList()
+        }
+
+        entries.mapNotNull { entry ->
+            val name     = entry.name
+            val ext      = name.substringAfterLast('.', "")
+            val baseName = name.substringBeforeLast('.')
+            val parsed   = parseFilenameWithTemplate(baseName, template)
+            val date        = parseDate(parsed.dateStr)
+            val phoneNumber = parsed.phoneNumber.trim().ifBlank { "Unknown" }
+            // Prefer contact name embedded in filename (if template uses {contact_name}),
+            // then fall back to a live contacts-db lookup.
+            val contactFromFile = if (template.contains("{contact_name}"))
+                parsed.contactName.ifBlank { null } else null
+            val contactName = if (phoneNumber != "Unknown")
+                contactFromFile ?: resolveContactName(context, phoneNumber)
+            else null
+            val noteText = notesPrefs.getString(entry.uri.toString(), "") ?: ""
+            val fileSize = entry.length
+            val durationMs = resolveAudioDuration(context, entry.uri, fileSize)
+            RecordingItem(
+                uri         = entry.uri,
+                displayName = name,
+                phoneNumber = phoneNumber,
+                contactName = contactName,
+                direction   = parsed.direction,
+                date        = date,
+                sizeBytes   = fileSize,
+                durationMs  = durationMs,
+                extension   = ext,
+                isFavourite = isFavourite(entry.uri),
+                noteText    = noteText
+            )
+        }
     }
 
     // ── Template-aware filename parser ────────────────────────────────────────
@@ -370,11 +447,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val timeEnabled  = preferences.isAutoDeleteByTimeEnabled()
         val spaceEnabled = preferences.isAutoDeleteBySpaceEnabled()
         if (!timeEnabled && !spaceEnabled) return
-
-        // Re-acquire DocumentFiles from the tree so delete() has proper SAF permissions
-        val folderUri  = preferences.getRecordingFolderUri() ?: return
-        val dir        = DocumentFile.fromTreeUri(context, folderUri) ?: return
-        val treeFiles  = dir.listFiles().associateBy { it.uri }
+        if (preferences.getStorageMode() == null) return
 
         val urisToDelete = mutableSetOf<Uri>()
         var working = recordings.toMutableList()
@@ -409,9 +482,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         if (urisToDelete.isEmpty()) return
 
-        // Delete via tree DocumentFile — most reliable with SAF permissions
+        // Delete works uniformly across SAF-folder and private-storage recordings.
         urisToDelete.forEach { uri ->
-            runCatching { treeFiles[uri]?.delete() }
+            runCatching { SafHelper.deleteRecording(context, uri) }
             notesPrefs.edit().remove(uri.toString()).apply()
             favPrefs.edit().remove(uri.toString()).apply()
         }

@@ -45,13 +45,13 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
      *
      * @param status                   Current state of every permission and setup step.
      * @param requestRuntimePermission Launches the system permission dialog for a given permission.
-     * @param launchFolderPicker       Opens the folder picker to choose a recording folder.
+     * @param showStorageChoice        Shows the popup letting the user pick between a SAF folder or private app storage.
      * @param onPermissionGranted      Called after any step completes so the UI can refresh.
      */
     fun onGrantAccess(
         status: OnboardingStatus.Status,
         requestRuntimePermission: (String) -> Unit,
-        launchFolderPicker: () -> Unit,
+        showStorageChoice: () -> Unit,
         onPermissionGranted: () -> Unit
     ) {
         when {
@@ -69,7 +69,7 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 )
             }
-            !status.storageSelected          -> launchFolderPicker()
+            !status.storageSelected          -> showStorageChoice()
             else                             -> { /* All steps completed, all permission granted.*/ }
         }
         // Always trigger a refresh of the UI to detect and show new permission changes.

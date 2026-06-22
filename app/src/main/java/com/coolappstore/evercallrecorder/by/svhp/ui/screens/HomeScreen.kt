@@ -1,6 +1,8 @@
 package com.coolappstore.evercallrecorder.by.svhp.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -87,6 +89,10 @@ fun HomeScreen(
     }
 
     var showBulkDeleteConfirm by remember { mutableStateOf(false) }
+
+    val saveSelectedLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.saveSelectedToFolder(context, uri)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -206,6 +212,7 @@ fun HomeScreen(
                             }
                             context.startActivity(Intent.createChooser(intent, "Share Recordings"))
                         },
+                        onSave      = { saveSelectedLauncher.launch(null) },
                         onDelete    = { showBulkDeleteConfirm = true }
                     )
                 }
@@ -240,6 +247,7 @@ private fun SelectionBar(
     onCancel: () -> Unit,
     onSelectAll: () -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
     onDelete: () -> Unit
 ) {
     Surface(
@@ -283,6 +291,9 @@ private fun SelectionBar(
                         Text("Select All", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+            IconButton(onClick = onSave, enabled = count > 0) {
+                Icon(Icons.Outlined.Download, contentDescription = "Save selected", tint = MaterialTheme.colorScheme.onSurface)
             }
             IconButton(onClick = onShare, enabled = count > 0) {
                 Icon(Icons.Outlined.Share, contentDescription = "Share selected", tint = MaterialTheme.colorScheme.onSurface)

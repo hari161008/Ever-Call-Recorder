@@ -80,11 +80,13 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifi
     val updateTrigger by viewModel.updateTrigger.collectAsState()
     val contactPickerViewModel: ContactPickerViewModel = viewModel()
     val contactPickerState by contactPickerViewModel.contactPickerState.collectAsState()
+    var showStorageChoiceDialog by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(PersistentFolderPickerContract()) { uri ->
         if (uri != null) {
             context.takePersistableFolderPermission(uri)
             viewModel.preferences.setRecordingFolderUri(uri)
+            viewModel.preferences.setStorageMode(AppPreferences.StorageMode.SAF_FOLDER)
         }
         viewModel.refresh()
     }
@@ -98,7 +100,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifi
         updateTrigger = updateTrigger,
         actions = viewModel,
         contactPickerState = contactPickerState,
-        onSelectFolder = { folderPickerLauncher.launch(null) },
+        onStorageClick = { showStorageChoiceDialog = true },
         onOpenContactsIncoming = { contactPickerViewModel.openContactPicker(ContactPickerType.INCOMING) },
         onOpenContactsOutgoing = { contactPickerViewModel.openContactPicker(ContactPickerType.OUTGOING) },
         onConfirmContacts = { numbers -> contactPickerViewModel.confirmContactPicker(numbers); viewModel.refresh() },
@@ -107,6 +109,21 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifi
         onBack = onBack,
         modifier = modifier
     )
+
+    if (showStorageChoiceDialog) {
+        StorageLocationDialog(
+            onChooseFolder = {
+                showStorageChoiceDialog = false
+                folderPickerLauncher.launch(null)
+            },
+            onChoosePrivate = {
+                viewModel.preferences.setStorageMode(AppPreferences.StorageMode.PRIVATE)
+                viewModel.refresh()
+                showStorageChoiceDialog = false
+            },
+            onDismiss = { showStorageChoiceDialog = false }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,7 +133,7 @@ fun SettingsContent(
     updateTrigger: Int,
     actions: SettingsActions,
     contactPickerState: ContactPickerState?,
-    onSelectFolder: () -> Unit,
+    onStorageClick: () -> Unit,
     onOpenContactsIncoming: () -> Unit,
     onOpenContactsOutgoing: () -> Unit,
     onConfirmContacts: (Set<String>) -> Unit,
@@ -152,7 +169,7 @@ fun SettingsContent(
                     // ORDER: Updates → Appearance → Recording → Audio → Security → Languages → About → Debug
                     UpdatesSection(preferences, updateTrigger, actions)
                     AppearanceSection(preferences, updateTrigger, actions)
-                    RecordingSection(preferences, updateTrigger, actions, onSelectFolder, onOpenContactsIncoming, onOpenContactsOutgoing)
+                    RecordingSection(preferences, updateTrigger, actions, onStorageClick, onOpenContactsIncoming, onOpenContactsOutgoing)
                     AutoDeleteSection(preferences, updateTrigger, actions)
                     AudioSection(preferences, updateTrigger, actions)
                     SecuritySection(preferences, updateTrigger, actions)
@@ -864,9 +881,10 @@ private fun AboutSection(versionString: String, onShowLicenses: () -> Unit) {
 @Composable
 private fun RecordingSection(
     preferences: AppPreferences, updateTrigger: Int, actions: SettingsActions,
-    onSelectFolder: () -> Unit, onOpenContactsIncoming: () -> Unit, onOpenContactsOutgoing: () -> Unit
+    onStorageClick: () -> Unit, onOpenContactsIncoming: () -> Unit, onOpenContactsOutgoing: () -> Unit
 ) {
     val context = LocalContext.current
+    val storageMode          = remember(updateTrigger) { preferences.getStorageMode() }
     val recordingFolderLabel = remember(updateTrigger) { SafHelper.getFolderDisplayNameOrNull(context, preferences.getRecordingFolderUri()) }
     val fileNameFormat       = remember(updateTrigger) { preferences.getFileNameTemplate() }
     val recordOnAnswer       = remember(updateTrigger) { preferences.isRecordOnAnswerEnabled() }
@@ -881,8 +899,64 @@ private fun RecordingSection(
     val ignoredContactsOutgoingCount = remember(updateTrigger) { preferences.getIgnoredContactsOutgoing().size }
     var showFileNameFormatDialog by remember { mutableStateOf(false) }
 
+    val appLockEnabled = remember(updateTrigger) { preferences.isAppLockEnabled() }
+    val appLockMethod  = remember(updateTrigger) { preferences.getAppLockMethod() }
+    var showAppLockSetupDialog by remember { mutableStateOf(false) }
+    var showAppLockVerifyDialog by remember { mutableStateOf(false) }
+    var pendingAfterAppLockVerify by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val storageSupportingText = when (storageMode) {
+        AppPreferences.StorageMode.PRIVATE    -> stringResource(R.string.storage_mode_private_label)
+        AppPreferences.StorageMode.SAF_FOLDER -> recordingFolderLabel ?: stringResource(R.string.settings_tap_to_select_folder)
+        null                                   -> stringResource(R.string.settings_tap_to_select_folder)
+    }
+    val storageIcon = if (storageMode == AppPreferences.StorageMode.PRIVATE) Icons.Outlined.Lock else Icons.Outlined.Folder
+
     SettingsSection(title = stringResource(R.string.settings_section_recording), icon = Icons.Outlined.FiberManualRecord) {
-        SectionListItem(icon = Icons.Outlined.Folder, headline = stringResource(R.string.settings_recording_folder_label), supporting = recordingFolderLabel ?: stringResource(R.string.settings_tap_to_select_folder), supportingColor = MaterialTheme.colorScheme.primary, onClick = onSelectFolder)
+        ListItem(
+            modifier = Modifier.clickable {
+                if (appLockEnabled) {
+                    pendingAfterAppLockVerify = { showAppLockSetupDialog = true }
+                    showAppLockVerifyDialog = true
+                } else {
+                    showAppLockSetupDialog = true
+                }
+            },
+            leadingContent = {
+                Crossfade(targetState = appLockEnabled, label = "appLockRowIcon") { enabled ->
+                    Icon(
+                        imageVector = if (enabled) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            },
+            headlineContent = { Text("App Lock", style = MaterialTheme.typography.bodyMedium) },
+            supportingContent = {
+                Text(
+                    text = if (appLockEnabled) "Protected with ${appLockMethodLabel(appLockMethod)}" else "Off · tap to set up",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (appLockEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = appLockEnabled,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            showAppLockSetupDialog = true
+                        } else {
+                            pendingAfterAppLockVerify = { actions.disableAppLock() }
+                            showAppLockVerifyDialog = true
+                        }
+                    }
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        SectionListItem(icon = storageIcon, headline = stringResource(R.string.settings_recording_folder_label), supporting = storageSupportingText, supportingColor = MaterialTheme.colorScheme.primary, onClick = onStorageClick)
         SectionListItem(icon = Icons.Outlined.DriveFileRenameOutline, headline = stringResource(R.string.settings_file_name_template), supporting = fileNameFormat, supportingColor = MaterialTheme.colorScheme.primary, onClick = { showFileNameFormatDialog = true })
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
         ToggleListItem(
@@ -940,6 +1014,32 @@ private fun RecordingSection(
 
     if (showFileNameFormatDialog) {
         FileNameFormatDialog(initialFormat = fileNameFormat, onConfirm = { format -> actions.setFileNameTemplate(format); showFileNameFormatDialog = false }, onDismiss = { showFileNameFormatDialog = false })
+    }
+
+    if (showAppLockSetupDialog) {
+        AppLockSetupDialog(
+            onSetPin = { pin -> actions.setAppLockPin(pin) },
+            onSetPassword = { password -> actions.setAppLockPassword(password) },
+            onSetBiometric = { actions.setAppLockBiometric() },
+            onDismiss = { showAppLockSetupDialog = false }
+        )
+    }
+
+    if (showAppLockVerifyDialog) {
+        AppLockVerifyDialog(
+            method = appLockMethod,
+            onVerifySecret = { secret -> actions.verifyAppLockSecret(secret) },
+            onVerified = {
+                showAppLockVerifyDialog = false
+                val pending = pendingAfterAppLockVerify
+                pendingAfterAppLockVerify = null
+                pending?.invoke()
+            },
+            onDismiss = {
+                showAppLockVerifyDialog = false
+                pendingAfterAppLockVerify = null
+            }
+        )
     }
 }
 
@@ -1305,7 +1405,12 @@ private fun SettingsScreenPreview() {
             override fun setAutoDeleteBySpaceValue(value: Int) {}
             override fun setAutoDeleteBySpaceUnit(unit: String) {}
             override fun setAutoUpdateCheckEnabled(enabled: Boolean) {}
+            override fun setAppLockPin(pin: String) {}
+            override fun setAppLockPassword(password: String) {}
+            override fun setAppLockBiometric() {}
+            override fun disableAppLock() {}
+            override fun verifyAppLockSecret(secret: String): Boolean = true
         }
-        SettingsContent(preferences = dummyPreferences, updateTrigger = 0, actions = dummyActions, contactPickerState = null, onSelectFolder = {}, onOpenContactsIncoming = {}, onOpenContactsOutgoing = {}, onConfirmContacts = {}, onDismissContacts = {}, onExportLogs = {}, onBack = {})
+        SettingsContent(preferences = dummyPreferences, updateTrigger = 0, actions = dummyActions, contactPickerState = null, onStorageClick = {}, onOpenContactsIncoming = {}, onOpenContactsOutgoing = {}, onConfirmContacts = {}, onDismissContacts = {}, onExportLogs = {}, onBack = {})
     }
 }

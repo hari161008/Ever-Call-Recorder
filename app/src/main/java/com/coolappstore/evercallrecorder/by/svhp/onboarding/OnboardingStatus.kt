@@ -31,7 +31,7 @@ object OnboardingStatus {
      * @param phoneStateGranted         True if READ_PHONE_STATE is granted.
      * @param callLogGranted            True if the app has permission to access the call log.
      * @param batteryExempted           True if the app is on the battery-optimisation whitelist.
-     * @param storageSelected           True if a valid SAF recording folder has been chosen.
+     * @param storageSelected           True if a valid recording storage destination has been chosen (SAF folder or private app storage).
      * @param shizukuRunning            True if the Shizuku service is currently active.
      * @param shizukuPermissionGranted  True if the user has granted Shizuku permission to this app.
      */
@@ -70,7 +70,6 @@ object OnboardingStatus {
      * @return A fully populated [Status] reflecting the current device state.
      */
     fun getStatus(context: Context, preferences: AppPreferences): Status {
-        val storageUri = preferences.getRecordingFolderUri()
         return Status(
             disclaimerAccepted       = preferences.isDisclaimerAccepted(),
             notificationsGranted     = PermissionChecks.hasNotificationPermission(context),
@@ -78,7 +77,7 @@ object OnboardingStatus {
             phoneStateGranted        = PermissionChecks.hasPhoneStatePermission(context),
             callLogGranted           = PermissionChecks.hasCallLogPermission(context),
             batteryExempted          = PermissionChecks.hasBatteryExemption(context),
-            storageSelected          = SafHelper.isFolderValid(context, storageUri),
+            storageSelected          = SafHelper.isStorageConfigured(context, preferences),
             // Special check here, if the auto-manage option was enabled, users already passed this check, and we can assume app will be able to start/stop Shizuku as needed.
             shizukuRunning           = ShizukuConnectionManager.isAvailable() || preferences.isShizukuAutoManageEnabled(),
             // We provide the context to use the Android Permission system as a fallback. Since if isShizukuAutoManageEnabled is enabled, we can assume the

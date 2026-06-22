@@ -62,6 +62,11 @@ interface SettingsActions {
     fun setAutoDeleteBySpaceValue(value: Int)
     fun setAutoDeleteBySpaceUnit(unit: String)
     fun setAutoUpdateCheckEnabled(enabled: Boolean)
+    fun setAppLockPin(pin: String)
+    fun setAppLockPassword(password: String)
+    fun setAppLockBiometric()
+    fun disableAppLock()
+    fun verifyAppLockSecret(secret: String): Boolean
 }
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application), SettingsActions {
@@ -124,6 +129,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     override fun setAutoDeleteBySpaceValue(value: Int)         { preferences.setAutoDeleteBySpaceValue(value); refresh() }
     override fun setAutoDeleteBySpaceUnit(unit: String)        { preferences.setAutoDeleteBySpaceUnit(unit); refresh() }
     override fun setAutoUpdateCheckEnabled(enabled: Boolean)   { preferences.setAutoUpdateCheckEnabled(enabled); refresh() }
+    override fun setAppLockPin(pin: String) { preferences.setAppLockSecret(AppPreferences.AppLockMethod.PIN, pin); refresh() }
+    override fun setAppLockPassword(password: String) { preferences.setAppLockSecret(AppPreferences.AppLockMethod.PASSWORD, password); refresh() }
+    override fun setAppLockBiometric() { preferences.setAppLockBiometric(); refresh() }
+    override fun disableAppLock() { preferences.clearAppLock(); refresh() }
+    override fun verifyAppLockSecret(secret: String): Boolean = preferences.verifyAppLockSecret(secret)
     override fun setAppLanguage(languageCode: String) {
         val localeList = if (languageCode.isEmpty()) LocaleListCompat.getEmptyLocaleList()
                          else LocaleListCompat.forLanguageTags(languageCode)

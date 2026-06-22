@@ -12,7 +12,6 @@ import android.app.Service
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import androidx.documentfile.provider.DocumentFile
 import com.coolappstore.evercallrecorder.by.svhp.IShellService
 import com.coolappstore.evercallrecorder.by.svhp.R
 import com.coolappstore.evercallrecorder.by.svhp.data.AppPreferences
@@ -118,12 +117,11 @@ class AudioRecordingEngine {
     fun startPipeline(context: Service, service: IShellService, metadata: RecordingMetadata) {
         initializationMetadata = metadata
         val preferences = AppPreferences(context)
-        val folderUri = preferences.getRecordingFolderUri()
 
-        if (!SafHelper.isFolderValid(context, folderUri)) {
+        if (!SafHelper.isStorageConfigured(context, preferences)) {
             throw PipelineInitializationException(
                 userFriendlyMessage = context.getString(R.string.recording_error_folder_missing),
-                technicalLogMessage = "Cannot start recording: Selected Output folder is missing, invalid, or we do not have permission to write to it"
+                technicalLogMessage = "Cannot start recording: No valid recording storage is configured (folder missing/invalid, or no storage mode chosen)"
             )
         }
 
@@ -135,10 +133,10 @@ class AudioRecordingEngine {
 
         val fileName = RecordingFileNameFormatter.formatFileName(context, metadata, codecEnum)
 
-        val safResult = SafHelper.createAudioFile(context, folderUri, fileName, codecEnum.mimeType)
+        val safResult = SafHelper.createAudioFile(context, preferences, fileName, codecEnum.mimeType)
             ?: throw PipelineInitializationException(
                 userFriendlyMessage = context.getString(R.string.recording_error_file_creation),
-                technicalLogMessage = "Failed to create audio file in SAF storage"
+                technicalLogMessage = "Failed to create audio file in configured storage"
             )
 
         AppLogger.d(TAG, "Created SAF recording file: ${safResult.uri}")
@@ -261,7 +259,7 @@ class AudioRecordingEngine {
         release(shellService)
         try {
             currentRecordingUri?.let { uri ->
-                DocumentFile.fromSingleUri(context, uri)?.delete()
+                SafHelper.deleteRecording(context, uri)
             }
             AppLogger.d(TAG, "Cleaned up empty file after start failure")
         } catch (e: Exception) {

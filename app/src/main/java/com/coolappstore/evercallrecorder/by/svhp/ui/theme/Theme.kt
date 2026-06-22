@@ -134,6 +134,34 @@ private val PureBlackColorScheme = darkColorScheme(
     onBackground        = Color(0xFFE5E5E5)
 )
 
+// ── Parametric scheme from user-chosen accent color, forced onto a pure white/black canvas ────
+// Used when the user picked "White"/"Black"/"Auto W/B" AND turned dynamic color off AND chose a
+// custom accent color: the background/surface stays pure white (or black), but every accent role
+// (primary, secondary, tertiary, containers, outline) follows the custom hue, exactly like the
+// regular accent-color scheme does for Light/Dark mode.
+
+private fun buildLightSchemeOnWhite(hue: Float) = buildLightScheme(hue).copy(
+    surface                 = Color.White,
+    surfaceContainerLowest  = Color.White,
+    surfaceContainerLow     = Color(0xFFF8F8F8),
+    surfaceContainer        = Color(0xFFF2F2F2),
+    surfaceContainerHigh    = Color(0xFFEDEDED),
+    surfaceContainerHighest = Color(0xFFE8E8E8),
+    background              = Color.White,
+    onBackground            = NearBlackText
+)
+
+private fun buildDarkSchemeOnBlack(hue: Float) = buildDarkScheme(hue).copy(
+    surface                 = Color.Black,
+    surfaceContainerLowest  = Color.Black,
+    surfaceContainerLow     = Color(0xFF0A0A0A),
+    surfaceContainer        = Color(0xFF121212),
+    surfaceContainerHigh    = Color(0xFF1A1A1A),
+    surfaceContainerHighest = Color(0xFF222222),
+    background              = Color.Black,
+    onBackground            = OffWhiteText
+)
+
 // ── Public theme composable ───────────────────────────────────────────────────
 
 @Composable
@@ -158,6 +186,13 @@ fun ShizucallrecorderTheme(
                 surfaceContainerHighest = Color(0xFFE8E8E8)
             )
         }
+        // Dynamic color is off but the user picked a custom accent: keep the white canvas but
+        // tint every accent role with their chosen hue instead of falling back to monochrome.
+        isPureWhite && accentArgb != null -> {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(accentArgb, hsv)
+            buildLightSchemeOnWhite(hsv[0])
+        }
         isPureWhite -> PureWhiteColorScheme
         isPureBlack && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
@@ -170,6 +205,12 @@ fun ShizucallrecorderTheme(
                 surfaceContainerLowest = Color.Black,
                 surfaceContainerHighest = Color(0xFF222222)
             )
+        }
+        // Same fix as above, mirrored for the pure black canvas.
+        isPureBlack && accentArgb != null -> {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(accentArgb, hsv)
+            buildDarkSchemeOnBlack(hsv[0])
         }
         isPureBlack -> PureBlackColorScheme
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {

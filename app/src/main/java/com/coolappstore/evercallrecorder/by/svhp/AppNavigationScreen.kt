@@ -27,10 +27,13 @@ import com.coolappstore.evercallrecorder.by.svhp.system.isApkReadyToInstall
 import com.coolappstore.evercallrecorder.by.svhp.system.saveDownloadedVersion
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.DisclaimerScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.HomeScreen
+import com.coolappstore.evercallrecorder.by.svhp.ui.screens.AppLockScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PermissionsScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PlaybackScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.SettingsScreen
+import com.coolappstore.evercallrecorder.by.svhp.ui.screens.WelcomeDialog
 import com.coolappstore.evercallrecorder.by.svhp.ui.theme.ShizucallrecorderTheme
+import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.AppLockViewModel
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.AppNavigationViewModel
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.RecordingItem
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.SettingsViewModel
@@ -86,8 +89,10 @@ fun AppNavigationScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
     val appNavViewModel: AppNavigationViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
+    val appLockViewModel: AppLockViewModel = viewModel()
     val onboardingStatus by appNavViewModel.onboardingStatus.collectAsState()
     val settingsUpdateTrigger by settingsViewModel.updateTrigger.collectAsState()
+    val isAppLockUnlocked by appLockViewModel.isUnlocked.collectAsState()
     val preferences = settingsViewModel.preferences
 
     var subScreen by rememberSaveable { mutableStateOf(SubScreen.None) }
@@ -103,6 +108,9 @@ fun AppNavigationScreen() {
     var autoDownloadId          by remember { mutableStateOf<Long?>(null) }
     var autoDownloadProgress    by remember { mutableFloatStateOf(0f) }
     var showAutoDownloadProgress by remember { mutableStateOf(false) }
+
+    // ── First-launch welcome dialog ───────────────────────────────────────────
+    var showWelcomeDialog by remember { mutableStateOf(!preferences.isWelcomeShown()) }
 
     LaunchedEffect(Unit) {
         if (preferences.isAutoUpdateCheckEnabled()) {
@@ -242,9 +250,13 @@ fun AppNavigationScreen() {
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                appNavViewModel.refresh()
-                settingsViewModel.refresh()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    appNavViewModel.refresh()
+                    settingsViewModel.refresh()
+                }
+                Lifecycle.Event.ON_STOP -> appLockViewModel.lock()
+                else -> {}
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -358,10 +370,13 @@ fun AppNavigationScreen() {
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            BackHandler(enabled = subScreen != SubScreen.None) { goBack() }
+        // ── First-launch welcome dialog ───────────────────────────────────────
 
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             val screen = resolveScreen(onboardingStatus)
+            val isAppLocked = screen == AppScreen.Home && preferences.isAppLockEnabled() && !isAppLockUnlocked
+            BackHandler(enabled = subScreen != SubScreen.None && !isAppLocked) { goBack() }
+
             when (screen) {
                 AppScreen.Disclaimer -> DisclaimerScreen(
                     onContinue = {
@@ -374,6 +389,13 @@ fun AppNavigationScreen() {
                     onPermissionGranted = { appNavViewModel.refresh() }
                 )
                 AppScreen.Home -> {
+                    if (isAppLocked) {
+                        AppLockScreen(
+                            method = preferences.getAppLockMethod(),
+                            onVerifySecret = { secret -> preferences.verifyAppLockSecret(secret) },
+                            onUnlocked = { appLockViewModel.unlock() }
+                        )
+                    } else {
                     AnimatedContent(
                         targetState = subScreen,
                         transitionSpec = {
@@ -401,6 +423,16 @@ fun AppNavigationScreen() {
                                 )
                             }
                         }
+                    }
+
+                    if (showWelcomeDialog) {
+                        WelcomeDialog(
+                            onDismiss = {
+                                preferences.setWelcomeShown(true)
+                                showWelcomeDialog = false
+                            }
+                        )
+                    }
                     }
                 }
             }

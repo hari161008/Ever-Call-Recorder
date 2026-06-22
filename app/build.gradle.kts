@@ -229,6 +229,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.biometric)
 
     // Compose Core
     implementation(libs.androidx.activity.compose)
