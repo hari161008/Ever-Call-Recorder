@@ -887,7 +887,6 @@ private fun RecordingSection(
     val storageMode          = remember(updateTrigger) { preferences.getStorageMode() }
     val recordingFolderLabel = remember(updateTrigger) { SafHelper.getFolderDisplayNameOrNull(context, preferences.getRecordingFolderUri()) }
     val fileNameFormat       = remember(updateTrigger) { preferences.getFileNameTemplate() }
-    val recordOnAnswer       = remember(updateTrigger) { preferences.isRecordOnAnswerEnabled() }
     val autoRecordIncoming   = remember(updateTrigger) { preferences.isAutoRecordIncomingEnabled() }
     val autoRecordOutgoing   = remember(updateTrigger) { preferences.isAutoRecordOutgoingEnabled() }
     val ignoreAnonymousIncoming    = remember(updateTrigger) { preferences.isIgnoreAnonymousIncomingEnabled() }
@@ -958,13 +957,6 @@ private fun RecordingSection(
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
         SectionListItem(icon = storageIcon, headline = stringResource(R.string.settings_recording_folder_label), supporting = storageSupportingText, supportingColor = MaterialTheme.colorScheme.primary, onClick = onStorageClick)
         SectionListItem(icon = Icons.Outlined.DriveFileRenameOutline, headline = stringResource(R.string.settings_file_name_template), supporting = fileNameFormat, supportingColor = MaterialTheme.colorScheme.primary, onClick = { showFileNameFormatDialog = true })
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-        ToggleListItem(
-            label = stringResource(R.string.settings_record_on_answer),
-            checked = recordOnAnswer,
-            onCheckedChange = { actions.setRecordOnAnswer(it) },
-            description = stringResource(R.string.settings_record_on_answer_desc)
-        )
     }
 
     // Incoming
@@ -1396,7 +1388,6 @@ private fun SettingsScreenPreview() {
             override fun setShizukuKeepAliveEnabled(enabled: Boolean) {}
             override fun setShizukuAuthKey(key: String) {}
             override fun setFileNameTemplate(template: String) {}
-            override fun setRecordOnAnswer(enabled: Boolean) {}
             override fun setAccentColor(argb: Int) {}
             override fun setAutoDeleteByTimeEnabled(enabled: Boolean) {}
             override fun setAutoDeleteByTimeValue(value: Int) {}

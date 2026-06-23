@@ -51,7 +51,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -263,38 +262,42 @@ private fun KeypadKey(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.82f else 1f,
+        targetValue = if (pressed) 0.84f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
         label = "keyScale"
     )
     val haptics = LocalHapticFeedback.current
     val glyphColor = MaterialTheme.colorScheme.onSurfaceVariant
     val labelColor = MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = modifier.size(64.dp).graphicsLayer { scaleX = scale; scaleY = scale },
-        contentAlignment = Alignment.Center
+    // Surface keeps full 64dp touch target; scale applied only to visual content inside
+    Surface(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
+        enabled = enabled,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        interactionSource = interactionSource,
+        modifier = modifier.size(64.dp)
     ) {
-        Surface(
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
-            },
-            enabled = enabled,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            interactionSource = interactionSource,
-            modifier = Modifier.fillMaxSize()
+        Box(
+            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale },
+            contentAlignment = Alignment.Center
         ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                when {
-                    isBackspace -> Icon(
-                        imageVector = Icons.Outlined.Backspace,
-                        contentDescription = "Backspace",
-                        tint = glyphColor,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    label != null -> Text(label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium, color = labelColor)
-                }
+            when {
+                isBackspace -> Icon(
+                    imageVector = Icons.Outlined.Backspace,
+                    contentDescription = "Backspace",
+                    tint = glyphColor,
+                    modifier = Modifier.size(26.dp)
+                )
+                label != null -> Text(
+                    label,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = labelColor
+                )
             }
         }
     }
@@ -302,7 +305,7 @@ private fun KeypadKey(
 
 /**
  * A 3-column numeric keypad (1-9, then backspace / 0 / confirm) used for PIN entry.
- * Keys animate in with a staggered spring entrance.
+ * Keys fade in with a fast stagger; touch targets are always full-size.
  */
 @Composable
 fun NumericKeypad(
@@ -313,14 +316,15 @@ fun NumericKeypad(
     showConfirm: Boolean = false,
     onConfirm: () -> Unit = {}
 ) {
-    // 12 slots: 0-8 = digits 1-9, 9 = backspace, 10 = 0, 11 = confirm/blank
     val total = 12
-    val visible = remember { List(total) { androidx.compose.runtime.mutableStateOf(false) } }
+    val alphas = remember { List(total) { Animatable(0f) } }
 
     LaunchedEffect(Unit) {
-        visible.forEachIndexed { i, state ->
-            delay(i * 40L)
-            state.value = true
+        alphas.forEachIndexed { i, anim ->
+            launch {
+                delay(i * 25L)
+                anim.animateTo(1f, animationSpec = tween(durationMillis = 120))
+            }
         }
     }
 
@@ -330,44 +334,25 @@ fun NumericKeypad(
         listOf('7', '8', '9')
     )
 
-    @Composable
-    fun AnimatedKey(index: Int, content: @Composable () -> Unit) {
-        val scale by animateFloatAsState(
-            targetValue = if (visible[index].value) 1f else 0f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-            label = "keyScale$index"
-        )
-        val alpha by animateFloatAsState(
-            targetValue = if (visible[index].value) 1f else 0f,
-            animationSpec = tween(durationMillis = 200),
-            label = "keyAlpha$index"
-        )
-        Box(modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }) {
-            content()
-        }
-    }
-
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         rows.forEachIndexed { rowIdx, row ->
             Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                 row.forEachIndexed { colIdx, digit ->
-                    AnimatedKey(rowIdx * 3 + colIdx) {
+                    val idx = rowIdx * 3 + colIdx
+                    Box(modifier = Modifier.graphicsLayer { alpha = alphas[idx].value }) {
                         KeypadKey(label = digit.toString(), enabled = enabled, onClick = { onDigit(digit) })
                     }
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Left: backspace
-            AnimatedKey(9) {
+            Box(modifier = Modifier.graphicsLayer { alpha = alphas[9].value }) {
                 KeypadKey(isBackspace = true, enabled = enabled, onClick = onBackspace)
             }
-            // Center: 0
-            AnimatedKey(10) {
+            Box(modifier = Modifier.graphicsLayer { alpha = alphas[10].value }) {
                 KeypadKey(label = "0", enabled = enabled, onClick = { onDigit('0') })
             }
-            // Right: confirm tick or spacer
-            AnimatedKey(11) {
+            Box(modifier = Modifier.graphicsLayer { alpha = alphas[11].value }) {
                 if (showConfirm) {
                     Surface(
                         onClick = onConfirm,

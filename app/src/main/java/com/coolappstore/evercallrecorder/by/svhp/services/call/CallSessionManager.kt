@@ -130,7 +130,6 @@ class CallSessionManager private constructor(context: Context) {
         fun clear() {
             currentMetadata = null
             wasRecordingServiceStartIntentSend = false
-            // We clear the temporary cache to prevent any stale data from being used in future sessions
             temporaryCache.clear()
         }
     }
@@ -192,8 +191,7 @@ class CallSessionManager private constructor(context: Context) {
 
         // 1. Handle IDLE (Stop, no longer in a call)
         if (receivedCallState == TelephonyManager.CALL_STATE_IDLE) {
-            sessionJob?.cancel() // Cancel pending verification window or ongoing session if any
-            // Only trigger stop logic if we were previously in an active session. Prevents redundant stop commands on possible repeated IDLE broadcasts.
+            sessionJob?.cancel()
             if (session.isSessionActive) {
                 AppLogger.d(TAG, "Phone state is now idle (call ended). Sending stop INTENT for ${session.currentMetadata?.direction} call to RecordingForegroundService.")
                 sendServiceCommand(RecordingForegroundService.ACTION_STOP_RECORDING)
@@ -239,11 +237,11 @@ class CallSessionManager private constructor(context: Context) {
             }
         }
 
-        // 4a. Handle RINGING — if "Record when Answered" is OFF, start service immediately at ringing
-        if (state == TelephonyManager.CALL_STATE_RINGING && !preferences.isRecordOnAnswerEnabled()) {
+        // 4a. Handle RINGING — evaluate service start at ringing state
+        if (state == TelephonyManager.CALL_STATE_RINGING) {
             val ringMetadata = session.currentMetadata
             if (ringMetadata != null) {
-                AppLogger.d(TAG, "Record-on-answer is OFF: evaluating service start at RINGING state.")
+                AppLogger.d(TAG, "Evaluating service start at RINGING state.")
                 withContext(Dispatchers.Main) { evaluateAndStartService() }
             }
         }
@@ -254,16 +252,11 @@ class CallSessionManager private constructor(context: Context) {
             if (rawNumber.isNullOrBlank()) {
                 AppLogger.d(TAG, "Number is blank or null. May be a anonymous call. Starting 500ms verification window.")
                 delay(500)
-                // If rawNumber is still blank after delay, we continue as anonymous. If we receive another broadcast, cancel is called and stop this logic here.
-                // Meaning we would restart a new 500ms window.
             }
 
-            // Perform metadata ENRICHMENT
-            // This takes the raw metadata and try to populate advanced fields about the phone number.
             val currentMetadata = session.currentMetadata ?: throw IllegalStateException("Current metadata should not be null at this point. There is a logic error in the flow.")
             val enrichedMetadata = RecordingMetadata.enrichMetadata(appContext, currentMetadata)
 
-            // Move to the Main thread (sync) to be thread-safe
             withContext(Dispatchers.Main) {
                 session.currentMetadata = enrichedMetadata
                 evaluateAndStartService()

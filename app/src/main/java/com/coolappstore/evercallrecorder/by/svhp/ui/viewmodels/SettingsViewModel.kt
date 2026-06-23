@@ -53,7 +53,6 @@ interface SettingsActions {
     fun setShizukuKeepAliveEnabled(enabled: Boolean)
     fun setShizukuAuthKey(key: String)
     fun setFileNameTemplate(template: String)
-    fun setRecordOnAnswer(enabled: Boolean)
     fun setAccentColor(argb: Int)
     fun setAutoDeleteByTimeEnabled(enabled: Boolean)
     fun setAutoDeleteByTimeValue(value: Int)
@@ -120,7 +119,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     override fun setThemeMode(mode: AppPreferences.ThemeMode) { preferences.setThemeMode(mode); refresh() }
     override fun setDynamicColorEnabled(enabled: Boolean) { preferences.setDynamicColorEnabled(enabled); refresh() }
     override fun setShowToastsEnabled(enabled: Boolean) { preferences.setShowToastsEnabled(enabled); refresh() }
-    override fun setRecordOnAnswer(enabled: Boolean) { preferences.setRecordOnAnswerEnabled(enabled); refresh() }
     override fun setAccentColor(argb: Int) { preferences.setAccentColor(argb); refresh() }
     override fun setAutoDeleteByTimeEnabled(enabled: Boolean)  { preferences.setAutoDeleteByTimeEnabled(enabled); refresh() }
     override fun setAutoDeleteByTimeValue(value: Int)          { preferences.setAutoDeleteByTimeValue(value); refresh() }
