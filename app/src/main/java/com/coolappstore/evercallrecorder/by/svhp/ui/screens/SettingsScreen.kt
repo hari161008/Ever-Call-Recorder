@@ -65,6 +65,7 @@ import com.coolappstore.evercallrecorder.by.svhp.system.openGithub
 import com.coolappstore.evercallrecorder.by.svhp.system.openGithubReportIssue
 import com.coolappstore.evercallrecorder.by.svhp.system.openTelegramSupportGroup
 import com.coolappstore.evercallrecorder.by.svhp.system.openTelegramChannel
+import com.coolappstore.evercallrecorder.by.svhp.system.openUrlInBrowser
 import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import com.coolappstore.evercallrecorder.by.svhp.system.takePersistableFolderPermission
 import com.coolappstore.evercallrecorder.by.svhp.ui.common.*
@@ -75,7 +76,7 @@ import org.xmlpull.v1.XmlPullParser
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifier: Modifier = Modifier) {
+fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, onOpenWebView: (url: String, enableDownloads: Boolean, extraBottomDp: Int) -> Unit = { _, _, _ -> }, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val updateTrigger by viewModel.updateTrigger.collectAsState()
     val contactPickerViewModel: ContactPickerViewModel = viewModel()
@@ -107,6 +108,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit = {}, modifi
         onDismissContacts = { contactPickerViewModel.dismissContactPicker() },
         onExportLogs = { exportLogLauncher.launch("evercallrecorder_bug_report.log") },
         onBack = onBack,
+        onOpenWebView = onOpenWebView,
         modifier = modifier
     )
 
@@ -140,6 +142,7 @@ fun SettingsContent(
     onDismissContacts: () -> Unit,
     onExportLogs: () -> Unit,
     onBack: () -> Unit = {},
+    onOpenWebView: (url: String, enableDownloads: Boolean, extraBottomDp: Int) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showLicensesDialog by remember { mutableStateOf(false) }
@@ -166,8 +169,9 @@ fun SettingsContent(
             item {
                 Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Spacer(Modifier.height(8.dp))
-                    // ORDER: Updates → Appearance → Recording → Audio → Security → Languages → About → Debug
+                    // ORDER: Updates → Rate And Review → Appearance → Recording → Audio → Security → Languages → About → Debug
                     UpdatesSection(preferences, updateTrigger, actions)
+                    RateAndReviewSection(onOpenWebView = onOpenWebView)
                     AppearanceSection(preferences, updateTrigger, actions)
                     RecordingSection(preferences, updateTrigger, actions, onStorageClick, onOpenContactsIncoming, onOpenContactsOutgoing)
                     AutoDeleteSection(preferences, updateTrigger, actions)
@@ -567,6 +571,37 @@ private fun UpdatesSection(preferences: AppPreferences, updateTrigger: Int, acti
                 autoUpdateEnabled = it
                 actions.setAutoUpdateCheckEnabled(it)
             }
+        )
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+// ── Rate and Review section ───────────────────────────────────────────────────
+
+@Composable
+private fun RateAndReviewSection(
+    onOpenWebView: (url: String, enableDownloads: Boolean, extraBottomDp: Int) -> Unit
+) {
+    val context = LocalContext.current
+
+    SettingsSection(title = "Rate and Review", icon = Icons.Outlined.Star) {
+        SectionListItem(
+            icon = Icons.Outlined.RateReview,
+            headline = "Rate And Review",
+            supporting = "Share your feedback via our Google Form",
+            onClick = { context.openUrlInBrowser(com.coolappstore.evercallrecorder.by.svhp.AppUrls.RATE_AND_REVIEW) }
+        )
+        SectionListItem(
+            icon = Icons.Outlined.Reviews,
+            headline = "Check Ratings And Reviews",
+            supporting = "See what others are saying about the app",
+            onClick = { onOpenWebView(com.coolappstore.evercallrecorder.by.svhp.AppUrls.CHECK_RATINGS, false, 24) }
+        )
+        SectionListItem(
+            icon = Icons.Outlined.Apps,
+            headline = "More Apps",
+            supporting = "Explore other apps by the developer",
+            onClick = { onOpenWebView(com.coolappstore.evercallrecorder.by.svhp.AppUrls.MORE_APPS, true, 48) }
         )
         Spacer(Modifier.height(4.dp))
     }

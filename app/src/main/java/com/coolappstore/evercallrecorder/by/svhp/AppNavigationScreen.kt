@@ -28,6 +28,7 @@ import com.coolappstore.evercallrecorder.by.svhp.system.saveDownloadedVersion
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.DisclaimerScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.HomeScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.AppLockScreen
+import com.coolappstore.evercallrecorder.by.svhp.ui.screens.InAppWebViewScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PermissionsScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.PlaybackScreen
 import com.coolappstore.evercallrecorder.by.svhp.ui.screens.SettingsScreen
@@ -61,7 +62,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
 private enum class AppScreen { Disclaimer, Permissions, Home }
-private enum class SubScreen(val depth: Int) { None(0), Settings(1), Playback(1) }
+private enum class SubScreen(val depth: Int) { None(0), Settings(1), Playback(1), WebView(2) }
 
 private val NavEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
 private const val DURATION_IN  = 460
@@ -98,6 +99,9 @@ fun AppNavigationScreen() {
     var subScreen by rememberSaveable { mutableStateOf(SubScreen.None) }
     var selectedRecording by remember { mutableStateOf<RecordingItem?>(null) }
     var highlightQuery by remember { mutableStateOf("") }
+    var webViewUrl by remember { mutableStateOf("") }
+    var webViewEnableDownloads by remember { mutableStateOf(false) }
+    var webViewBottomPadding by remember { mutableStateOf(24) } // dp value
 
     val goBack: () -> Unit = { subScreen = SubScreen.None }
 
@@ -407,7 +411,22 @@ fun AppNavigationScreen() {
                     ) { target ->
                         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             when (target) {
-                                SubScreen.Settings -> SettingsScreen(viewModel = settingsViewModel, onBack = goBack)
+                                SubScreen.Settings -> SettingsScreen(
+                            viewModel = settingsViewModel,
+                            onBack = goBack,
+                            onOpenWebView = { url, enableDownloads, extraBottomDp ->
+                                webViewUrl = url
+                                webViewEnableDownloads = enableDownloads
+                                webViewBottomPadding = extraBottomDp
+                                subScreen = SubScreen.WebView
+                            }
+                        )
+                                SubScreen.WebView -> InAppWebViewScreen(
+                                    url = webViewUrl,
+                                    onBack = goBack,
+                                    enableDownloads = webViewEnableDownloads,
+                                    backButtonBottomPadding = webViewBottomPadding.dp
+                                )
                                 SubScreen.Playback -> {
                                     val rec = selectedRecording
                                     if (rec != null) PlaybackScreen(recording = rec, onBack = goBack, highlightQuery = highlightQuery)

@@ -112,6 +112,11 @@ fun Context.openTelegramChannel() {
     launchSmartIntent(Intent(Intent.ACTION_VIEW).apply { data = AppUrls.TELEGRAM_CHANNEL.toUri() })
 }
 
+/** Opens any URL in the system browser. */
+fun Context.openUrlInBrowser(url: String) {
+    launchSmartIntent(Intent(Intent.ACTION_VIEW).apply { data = url.toUri() })
+}
+
 /**
  * Copies [text] to the clipboard and shows a short confirmation message.
  * Safe to call from any thread.
