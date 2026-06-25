@@ -259,7 +259,12 @@ fun AppNavigationScreen() {
                     appNavViewModel.refresh()
                     settingsViewModel.refresh()
                 }
-                Lifecycle.Event.ON_STOP -> appLockViewModel.lock()
+                Lifecycle.Event.ON_STOP -> {
+                    // isChangingConfigurations is true during rotation / other config changes —
+                    // don't re-lock in that case, only when the app genuinely goes to background.
+                    val isConfigChange = (activityContext as? Activity)?.isChangingConfigurations == true
+                    if (!isConfigChange) appLockViewModel.lock()
+                }
                 else -> {}
             }
         }

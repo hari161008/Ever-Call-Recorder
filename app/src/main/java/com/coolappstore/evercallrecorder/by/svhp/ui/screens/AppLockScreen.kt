@@ -8,6 +8,7 @@
 
 package com.coolappstore.evercallrecorder.by.svhp.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.MutableTransitionState
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,12 +57,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -161,36 +165,65 @@ internal fun ColumnScope.PinUnlockContent(onVerifySecret: (String) -> Boolean, o
         }
     }
 
-    Spacer(modifier = Modifier.weight(1f))
-    Text("Enter your PIN", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        text = if (isError) "Incorrect PIN, try again." else "Enter your PIN to continue.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center
-    )
-    Spacer(modifier = Modifier.height(28.dp))
-    PinDotsRow(
-        length = pinInput.length.coerceAtLeast(1),
-        filledCount = pinInput.length,
-        isError = isError,
-        modifier = Modifier.offset(x = shake.value.dp)
-    )
-    Spacer(modifier = Modifier.height(36.dp))
-    NumericKeypad(
-        enabled = !locked,
-        onDigit = { digit ->
-            if (!locked && pinInput.length < APP_LOCK_PIN_MAX_LENGTH) {
-                pinInput += digit
-                if (pinInput.length == APP_LOCK_PIN_MAX_LENGTH) attemptVerify()
-            }
-        },
-        onBackspace = { if (!locked && pinInput.isNotEmpty()) pinInput = pinInput.dropLast(1) },
-        showConfirm = pinInput.length in APP_LOCK_PIN_MIN_LENGTH until APP_LOCK_PIN_MAX_LENGTH && !locked,
-        onConfirm = { attemptVerify() }
-    )
-    Spacer(modifier = Modifier.weight(1f))
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val keypad: @Composable () -> Unit = {
+        NumericKeypad(
+            enabled = !locked,
+            onDigit = { digit ->
+                if (!locked && pinInput.length < APP_LOCK_PIN_MAX_LENGTH) {
+                    pinInput += digit
+                    if (pinInput.length == APP_LOCK_PIN_MAX_LENGTH) attemptVerify()
+                }
+            },
+            onBackspace = { if (!locked && pinInput.isNotEmpty()) pinInput = pinInput.dropLast(1) },
+            showConfirm = pinInput.length in APP_LOCK_PIN_MIN_LENGTH until APP_LOCK_PIN_MAX_LENGTH && !locked,
+            onConfirm = { attemptVerify() }
+        )
+    }
+
+    val pinInfo: @Composable () -> Unit = {
+        Text("Enter your PIN", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (isError) "Incorrect PIN, try again." else "Enter your PIN to continue.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        PinDotsRow(
+            length = pinInput.length.coerceAtLeast(1),
+            filledCount = pinInput.length,
+            isError = isError,
+            modifier = Modifier.offset(x = shake.value.dp)
+        )
+    }
+
+    if (isLandscape) {
+        Row(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) { pinInfo() }
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) { keypad() }
+        }
+    } else {
+        Spacer(modifier = Modifier.weight(1f))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) { pinInfo() }
+        Spacer(modifier = Modifier.height(36.dp))
+        keypad()
+        Spacer(modifier = Modifier.weight(1f))
+    }
 }
 
 @Composable
@@ -260,6 +293,9 @@ internal fun ColumnScope.PasswordUnlockContent(onVerifySecret: (String) -> Boole
 internal fun ColumnScope.BiometricUnlockContent(onUnlocked: () -> Unit) {
     var errorText by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
+    // Survives rotation: once the prompt has been shown once, don't auto-show it again on
+    // recomposition (e.g. after a device rotation). The user can still retry via the button.
+    var hasShownInitialPrompt by rememberSaveable { mutableStateOf(false) }
 
     val showPrompt = rememberBiometricPrompt(
         onSuccess = onUnlocked,
@@ -267,7 +303,9 @@ internal fun ColumnScope.BiometricUnlockContent(onUnlocked: () -> Unit) {
     )
 
     LaunchedEffect(attempt) {
+        if (attempt == 0 && hasShownInitialPrompt) return@LaunchedEffect
         errorText = null
+        hasShownInitialPrompt = true
         showPrompt("Unlock Ever Call Recorder", null)
     }
 
@@ -279,30 +317,54 @@ internal fun ColumnScope.BiometricUnlockContent(onUnlocked: () -> Unit) {
         label = "lockScreenBiometricPulseScale"
     )
 
-    Spacer(modifier = Modifier.weight(1f))
-    Box(
-        modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-        contentAlignment = Alignment.Center
-    ) {
-        AppLockMethodIcon(
-            method = AppPreferences.AppLockMethod.BIOMETRIC,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.size(44.dp).graphicsLayer(scaleX = pulse, scaleY = pulse)
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val biometricIcon: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            AppLockMethodIcon(
+                method = AppPreferences.AppLockMethod.BIOMETRIC,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(44.dp).graphicsLayer(scaleX = pulse, scaleY = pulse)
+            )
+        }
+    }
+
+    val biometricText: @Composable () -> Unit = {
+        Text("Unlock with Biometrics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = errorText ?: "Use your fingerprint or face to continue.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (errorText != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = { attempt++ }, shape = CircleShape) {
+            Text("Unlock with Biometrics")
+        }
     }
-    Spacer(modifier = Modifier.height(24.dp))
-    Text("Unlock with Biometrics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        text = errorText ?: "Use your fingerprint or face to continue.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (errorText != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 32.dp)
-    )
-    Spacer(modifier = Modifier.height(24.dp))
-    Button(onClick = { attempt++ }, shape = CircleShape) {
-        Text("Unlock with Biometrics")
+
+    if (isLandscape) {
+        Row(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            biometricIcon()
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) { biometricText() }
+        }
+    } else {
+        Spacer(modifier = Modifier.weight(1f))
+        biometricIcon()
+        Spacer(modifier = Modifier.height(24.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) { biometricText() }
+        Spacer(modifier = Modifier.weight(1f))
     }
-    Spacer(modifier = Modifier.weight(1f))
 }

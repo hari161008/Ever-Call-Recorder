@@ -1417,7 +1417,7 @@ private fun SettingsScreenPreview() {
             override fun setDebugCallerNumber(number: String) {}
             override fun triggerDebugAction(action: DebugAction) {}
             override fun exportLogs(uri: Uri) {}
-            override fun getAppVersion(): String = "Version 2.0.0 (Mock)"
+            override fun getAppVersion(): String = "Version 3.0.0 (Mock)"
             override fun setShizukuAutoManageEnabled(enabled: Boolean) {}
             override fun setShizukuStartOnRecordEnabled(enabled: Boolean) {}
             override fun setShizukuKeepAliveEnabled(enabled: Boolean) {}

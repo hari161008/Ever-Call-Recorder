@@ -1,10 +1,14 @@
 package com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels
 
 import android.app.Application
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
@@ -199,6 +203,78 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 failureCount = toSave.size
+            }
+
+            withContext(Dispatchers.Main) {
+                if (preferences.isShowToastsEnabled()) {
+                    val message = when {
+                        successCount == 0 -> "Failed to save recordings"
+                        failureCount == 0 -> "Saved $successCount recording${if (successCount != 1) "s" else ""}"
+                        else              -> "Saved $successCount, failed to save $failureCount"
+                    }
+                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Copies the currently selected recordings into [directory], a plain [java.io.File] path
+     * chosen through the in-app file manager. Uses direct stream I/O (no SAF) so it works
+     * immediately without requiring an additional system folder-picker round-trip.
+     */
+    fun saveSelectedToDirectory(context: Context, directory: java.io.File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val toSave     = selectedUris.value.toSet()
+            val itemsByUri = _allRecordings.value.associateBy { it.uri }
+            var successCount = 0
+            var failureCount = 0
+
+            toSave.forEach { uri ->
+                val item    = itemsByUri[uri]
+                val rawName = item?.displayName?.takeIf { it.isNotBlank() }
+                    ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "recording_${System.currentTimeMillis()}")
+                val mime = context.contentResolver.getType(uri) ?: "audio/webm"
+                try {
+                    var copied = false
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            // Use MediaStore on Android 10+ — works without MANAGE_EXTERNAL_STORAGE
+                            // and is the only reliable write path on Android 11/12/13/14/15/16+.
+                            val externalRoot = Environment.getExternalStorageDirectory().absolutePath
+                            val rel = directory.absolutePath
+                                .removePrefix(externalRoot)
+                                .trimStart('/')
+                            val relativePath = if (rel.isEmpty()) "Download" else rel
+                            val cv = ContentValues().apply {
+                                put(MediaStore.Downloads.DISPLAY_NAME, rawName)
+                                put(MediaStore.Downloads.MIME_TYPE, mime)
+                                put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
+                            }
+                            val outUri = context.contentResolver.insert(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv
+                            )
+                            outUri?.let { dest ->
+                                context.contentResolver.openOutputStream(dest)?.use { output ->
+                                    input.copyTo(output)
+                                    copied = true
+                                }
+                            }
+                        } else {
+                            // Direct file I/O for Android 9 and below
+                            if (directory.exists() || directory.mkdirs()) {
+                                val targetFile = java.io.File(directory, rawName)
+                                java.io.FileOutputStream(targetFile).use { output ->
+                                    input.copyTo(output)
+                                    copied = true
+                                }
+                            }
+                        }
+                    }
+                    if (copied) successCount++ else failureCount++
+                } catch (_: Exception) {
+                    failureCount++
+                }
             }
 
             withContext(Dispatchers.Main) {

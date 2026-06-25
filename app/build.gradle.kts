@@ -108,8 +108,8 @@ val extractLibphonenumberMetadata = tasks.register<ExtractMetadataTask>("extract
     into(outputDir)
 }
 
-val ciVersionCode = providers.gradleProperty("versionCode").map { it.toIntOrNull() }.orElse(2)
-val ciVersionName = providers.gradleProperty("versionName").orElse("2.0.0")
+val ciVersionCode = providers.gradleProperty("versionCode").map { it.toIntOrNull() }.orElse(3)
+val ciVersionName = providers.gradleProperty("versionName").orElse("3.0.0")
 val ciBuildNumber = providers.gradleProperty("ciBuildNumber").orElse("Local")
 
 android {

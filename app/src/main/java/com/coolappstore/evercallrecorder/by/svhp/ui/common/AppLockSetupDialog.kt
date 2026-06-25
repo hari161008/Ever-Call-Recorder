@@ -9,6 +9,7 @@
 package com.coolappstore.evercallrecorder.by.svhp.ui.common
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,12 +68,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -125,6 +129,7 @@ fun AppLockSetupDialog(
     // Biometric state
     var biometricError by remember { mutableStateOf<String?>(null) }
     var biometricAttempt by remember { mutableIntStateOf(0) }
+    var hasShownBiometricPrompt by rememberSaveable { mutableStateOf(false) }
     val biometricAvailability = remember { context.checkBiometricAvailability() }
 
     val showBiometricPrompt = rememberBiometricPrompt(
@@ -216,7 +221,9 @@ fun AppLockSetupDialog(
 
     LaunchedEffect(step, biometricAttempt) {
         if (step == AppLockSetupStep.BIOMETRIC) {
+            if (biometricAttempt == 0 && hasShownBiometricPrompt) return@LaunchedEffect
             biometricError = null
+            hasShownBiometricPrompt = true
             showBiometricPrompt("Confirm it's you", "Use your fingerprint or face to enable App Lock")
         }
     }
@@ -320,7 +327,7 @@ private fun MethodChooserStep(
 ) {
     val context = LocalContext.current
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.Start
     ) {
         Spacer(modifier = Modifier.height(8.dp))
@@ -431,11 +438,9 @@ private fun PinEntryStep(
     pinSlotCount: Int? = null
 ) {
     val shake = rememberShakeAnimatable(shakeTrigger)
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.weight(1f))
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val pinInfoContent: @Composable () -> Unit = {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(modifier = Modifier.height(8.dp))
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
@@ -446,9 +451,40 @@ private fun PinEntryStep(
             isError = isError,
             modifier = Modifier.offset(x = shake.value.dp)
         )
-        Spacer(modifier = Modifier.height(40.dp))
+    }
+
+    val keypadContent: @Composable () -> Unit = {
         NumericKeypad(onDigit = onDigit, onBackspace = onBackspace, showConfirm = showManualConfirm, onConfirm = onManualConfirm)
-        Spacer(modifier = Modifier.weight(1f))
+    }
+
+    if (isLandscape) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) { pinInfoContent() }
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) { keypadContent() }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+            pinInfoContent()
+            Spacer(modifier = Modifier.height(40.dp))
+            keypadContent()
+            Spacer(modifier = Modifier.weight(1f))
+        }
     }
 }
 
@@ -549,11 +585,9 @@ private fun BiometricStep(
         animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
         label = "biometricPulseScale"
     )
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val iconContent: @Composable () -> Unit = {
         Box(
             modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
@@ -564,7 +598,9 @@ private fun BiometricStep(
                 modifier = Modifier.size(44.dp).graphicsLayer(scaleX = pulse, scaleY = pulse)
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    val textContent: @Composable () -> Unit = {
         Text("Confirm It's You", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -580,6 +616,30 @@ private fun BiometricStep(
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onUseAnotherMethod) { Text("Use PIN or Password instead") }
             }
+        }
+    }
+
+    if (isLandscape) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            iconContent()
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) { textContent() }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            iconContent()
+            Spacer(modifier = Modifier.height(24.dp))
+            textContent()
         }
     }
 }
