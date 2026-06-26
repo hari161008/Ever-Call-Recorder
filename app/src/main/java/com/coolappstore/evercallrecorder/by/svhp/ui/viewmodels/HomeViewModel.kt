@@ -230,17 +230,48 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             var successCount = 0
             var failureCount = 0
 
+            val privateAuthority = com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
+                .getPrivateStorageAuthority(context)
+            val privateDir = com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
+                .getPrivateStorageDir(context)
+
             toSave.forEach { uri ->
                 val item    = itemsByUri[uri]
                 val rawName = item?.displayName?.takeIf { it.isNotBlank() }
                     ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "recording_${System.currentTimeMillis()}")
-                val mime = context.contentResolver.getType(uri) ?: "audio/webm"
+
+                // Derive MIME type from extension so it's always correct regardless of
+                // how the ContentResolver resolves a FileProvider URI.
+                val ext  = rawName.substringAfterLast('.', "").lowercase()
+                val mime = when (ext) {
+                    "m4a"  -> "audio/mp4"
+                    "aac"  -> "audio/aac"
+                    "mp3"  -> "audio/mpeg"
+                    "opus" -> "audio/opus"
+                    "ogg"  -> "audio/ogg"
+                    "flac" -> "audio/flac"
+                    "wav"  -> "audio/wav"
+                    else   -> "audio/webm"
+                }
+
                 try {
                     var copied = false
-                    context.contentResolver.openInputStream(uri)?.use { input ->
+
+                    // For private-storage recordings the URI is a FileProvider content:// URI.
+                    // Opening it via ContentResolver on a background thread can silently return
+                    // null or throw on newer Android versions, so we resolve the real File and
+                    // read it directly — we always have permission to our own filesDir.
+                    val inputStream: java.io.InputStream? =
+                        if (uri.scheme == "content" && uri.authority == privateAuthority) {
+                            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: rawName
+                            val srcFile  = java.io.File(privateDir, fileName)
+                            if (srcFile.exists()) srcFile.inputStream() else null
+                        } else {
+                            context.contentResolver.openInputStream(uri)
+                        }
+
+                    inputStream?.use { input ->
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            // Use MediaStore on Android 10+ — works without MANAGE_EXTERNAL_STORAGE
-                            // and is the only reliable write path on Android 11/12/13/14/15/16+.
                             val externalRoot = Environment.getExternalStorageDirectory().absolutePath
                             val rel = directory.absolutePath
                                 .removePrefix(externalRoot)
@@ -261,7 +292,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                         } else {
-                            // Direct file I/O for Android 9 and below
                             if (directory.exists() || directory.mkdirs()) {
                                 val targetFile = java.io.File(directory, rawName)
                                 java.io.FileOutputStream(targetFile).use { output ->
