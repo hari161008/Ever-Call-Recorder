@@ -57,7 +57,7 @@ GitHub: [Download](https://github.com/hari161008/Ever-Call-Recorder/releases) �
 • 📞 Automatic Call Recording – Record incoming and outgoing calls automatically<br>
 • 🎙️ Two-Sided Recording – Capture voices from both sides of the conversation<br>
 • 👆 Manual Recording – Start call recording manually whenever needed<br>
-• 🔒 Supports App lock - Fingerprint, Pin, Password
+• 🔒 Supports App lock - Fingerprint, Pin, Password<br><br>
 
 ┈➤ Storage Management<br>
 
