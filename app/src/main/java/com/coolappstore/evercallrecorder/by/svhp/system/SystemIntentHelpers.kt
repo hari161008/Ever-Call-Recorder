@@ -79,6 +79,15 @@ fun Context.openAppSettings() {
 }
 
 /**
+ * Opens the system "Notification access" screen, where the user can grant this app permission
+ * to read notifications. Required by [com.coolappstore.evercallrecorder.by.svhp.services.call.AppCallNotificationListenerService]
+ * so it can detect ongoing WhatsApp/Telegram calls for the "Record calls from apps" feature.
+ */
+fun Context.openNotificationListenerSettings() {
+    launchSmartIntent(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+}
+
+/**
  * Opens the Shizuku app.
  * If Shizuku is not installed, opens the Shizuku website so the user can download it.
  */

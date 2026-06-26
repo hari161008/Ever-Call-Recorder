@@ -35,7 +35,8 @@ object RecordingFileNameFormatter {
         DIRECTION("{direction}", R.string.placeholder_direction_desc),
         PHONE_NUMBER("{phone_number}", R.string.placeholder_phone_number_desc),
         CONTACT_NAME("{contact_name}", R.string.placeholder_contact_name_desc),
-        CROSS_COUNTRY("{cross_country}", R.string.placeholder_cross_country_desc)
+        CROSS_COUNTRY("{cross_country}", R.string.placeholder_cross_country_desc),
+        APP_SOURCE("{app_source}", R.string.placeholder_app_source_desc)
     }
 
     /**
@@ -46,6 +47,7 @@ object RecordingFileNameFormatter {
      * - {phone_number}: The best available phone number
      * - {contact_name}: The contact name, if available
      * - {cross_country}: true/false indicating if the call is cross-country
+     * - {app_source}: The originating app name (e.g. "WhatsApp"), empty for normal telephony calls
      *
      * @param context The context needed to resolve contacts and read preferences.
      * @param metadata Defines the main properties (direction, phone number, cross country).
@@ -76,6 +78,7 @@ object RecordingFileNameFormatter {
         }
 
         val crossCountryStr = metadata.isCrossCountry.toString()
+        val appSourceStr = metadata.sourceApp.orEmpty()
 
         val baseName = template
             .replace(FileNamePlaceholder.DATE.tag, dateStr)
@@ -83,9 +86,19 @@ object RecordingFileNameFormatter {
             .replace(FileNamePlaceholder.PHONE_NUMBER.tag, phoneStr)
             .replace(FileNamePlaceholder.CONTACT_NAME.tag, contactStr)
             .replace(FileNamePlaceholder.CROSS_COUNTRY.tag, crossCountryStr)
+            .replace(FileNamePlaceholder.APP_SOURCE.tag, appSourceStr)
 
-        AppLogger.v(TAG, "Formatted base filename: '$baseName' with template '$template'")
-        return "$baseName${codec.containerExtension}"
+        // Recordings captured from a messaging app's VoIP call (see "Record calls from apps") are always
+        // prefixed with the app name, regardless of the user's template, so they are easy to tell apart
+        // from normal telephony recordings in file listings even if the template doesn't reference {app_source}.
+        val finalName = if (metadata.sourceApp != null && !template.contains(FileNamePlaceholder.APP_SOURCE.tag)) {
+            "${metadata.sourceApp}_$baseName"
+        } else {
+            baseName
+        }
+
+        AppLogger.v(TAG, "Formatted base filename: '$finalName' with template '$template'")
+        return "$finalName${codec.containerExtension}"
     }
 
     private fun getContactName(context: Context, phoneNumber: String): String? {

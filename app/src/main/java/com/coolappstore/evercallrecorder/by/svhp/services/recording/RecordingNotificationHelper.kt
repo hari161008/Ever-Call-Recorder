@@ -80,6 +80,9 @@ class RecordingNotificationHelper(private val context: Context) {
         val actionIntentAction: String?
         // We want to show the cross-country tip if we are unsure about the metadata, as it is better to be safe than sorry.
         val subRes: Int = if (state.metadata == null || state.metadata?.isCrossCountry == true) R.string.recording_notification_cross_country_tip else R.string.recording_notification_current_country_tip
+        // "Record calls from apps" sessions show which app the call came from instead of the cross-country tip.
+        val sourceApp = state.metadata?.sourceApp
+        val subText = if (sourceApp != null) context.getString(R.string.recording_notification_via_app, sourceApp) else context.getString(subRes)
 
         when (state) {
             is RecordingServiceState.Starting -> {
@@ -127,7 +130,7 @@ class RecordingNotificationHelper(private val context: Context) {
             .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
             .setContentTitle(context.getString(titleRes))
             .setContentText(context.getString(contentRes))
-            .setSubText(context.getString(subRes))
+            .setSubText(subText)
             .setOngoing(true) // Almost useless starting Android 14+ :)
             .setDeleteIntent(deletePendingIntent) // Android 14+ workaround :)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Nothing sensible here, and we want to show it on lockscreen.

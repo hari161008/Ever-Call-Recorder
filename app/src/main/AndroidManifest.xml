@@ -96,6 +96,20 @@
             </intent-filter>
         </receiver>
 
+        <!--
+             Used by "Record calls from apps" (Settings) to detect ongoing WhatsApp/Telegram calls via their
+             call notification, since VoIP calls placed inside a third-party app never raise PHONE_STATE.
+             The user must grant "Notification access" to this app for the system to bind this service.
+        -->
+        <service
+            android:name=".services.call.AppCallNotificationListenerService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

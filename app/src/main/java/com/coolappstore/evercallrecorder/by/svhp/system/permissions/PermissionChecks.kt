@@ -97,4 +97,19 @@ object PermissionChecks {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         return powerManager.isIgnoringBatteryOptimizations(context.packageName)
     }
+
+    /**
+     * Returns true if the user has granted this app Notification Access (i.e. it is an enabled
+     * [android.service.notification.NotificationListenerService] listener).
+     *
+     * Required by [com.coolappstore.evercallrecorder.by.svhp.services.call.AppCallNotificationListenerService]
+     * to detect ongoing calls from messaging apps (see "Record calls from apps" in Settings).
+     *
+     * @param context The app context.
+     * @return true if this app's package is among the system's enabled notification listeners.
+     */
+    fun hasNotificationListenerPermission(context: Context): Boolean {
+        val enabledPackages = NotificationManagerCompat.getEnabledListenerPackages(context)
+        return context.packageName in enabledPackages
+    }
 }

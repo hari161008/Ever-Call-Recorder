@@ -127,7 +127,24 @@ class AudioRecordingEngine {
 
         val codecEnum = ScrcpyAudioCodec.fromKey(preferences.getAudioCodec())
         val bitRate = preferences.getAudioBitRate().takeIf { it > 0 } ?: codecEnum.defaultBitRate
-        val audioSourceEnum = ScrcpyAudioSource.fromKey(preferences.getAudioSource())
+
+        // Calls placed through messaging apps (WhatsApp/Telegram) are VoIP, not telephony: there is no
+        // modem-level VOICE_CALL tap for them. We force OUTPUT (REMOTE_SUBMIX) instead, regardless of the
+        // user's normal phone-call audio source preference. Both PLAYBACK and MIC-family sources were tried
+        // and produced silent recordings: PLAYBACK (AudioPlaybackCaptureConfiguration) hard-excludes audio
+        // tagged AudioAttributes.USAGE_VOICE_COMMUNICATION — exactly how these apps tag call audio — at the
+        // platform level, regardless of caller privilege; and any MIC-class source competes with the app's
+        // own concurrent microphone session for the call, which Android silences for privacy. OUTPUT avoids
+        // both problems: it's a privileged, CAPTURE_AUDIO_OUTPUT-gated system mix tap (the same permission
+        // class as VOICE_CALL, which already works reliably for normal calls), not a microphone capture, and
+        // it predates the USAGE_VOICE_COMMUNICATION exclusion that was only added for the newer Playback
+        // Capture API. See "Record calls from apps" in Settings.
+        val audioSourceEnum = if (metadata.sourceApp != null) {
+            AppLogger.i(TAG, "Session originates from app '${metadata.sourceApp}' — forcing OUTPUT audio source instead of the configured '${preferences.getAudioSource()}'")
+            ScrcpyAudioSource.OUTPUT
+        } else {
+            ScrcpyAudioSource.fromKey(preferences.getAudioSource())
+        }
 
         AppLogger.i(TAG, "Starting recording pipeline: source=${audioSourceEnum.cliKey} codec=${codecEnum.cliKey} bitrate=$bitRate")
 

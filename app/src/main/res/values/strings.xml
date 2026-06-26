@@ -149,6 +149,20 @@
     <string name="placeholder_phone_number_desc">The phone number</string>
     <string name="placeholder_contact_name_desc">The contact name, if available</string>
     <string name="placeholder_cross_country_desc">Indicates if the call is cross-country (true/false)</string>
+    <string name="placeholder_app_source_desc">The originating app (e.g. WhatsApp), empty for normal calls</string>
+
+    <!-- Settings Screen: Record calls from apps -->
+    <string name="settings_app_call_recording_label">Record calls from apps</string>
+    <string name="settings_app_call_recording_off">Off</string>
+    <string name="settings_app_call_recording_dialog_title">Record Calls From Apps</string>
+    <string name="settings_app_call_recording_dialog_description">Automatically record voice and video calls placed through the apps below, using the same privileged audio capture mechanism this app already uses for normal calls.</string>
+    <string name="settings_app_call_recording_permission_title">Notification access required</string>
+    <string name="settings_app_call_recording_permission_description">To detect when a call starts in these apps, Ever Call Recorder needs permission to read notifications.</string>
+    <string name="settings_app_call_recording_grant_access">Grant Access</string>
+    <string name="settings_app_call_recording_access_granted">Notification access granted</string>
+    <string name="app_call_target_whatsapp" translatable="false">WhatsApp</string>
+    <string name="app_call_target_telegram" translatable="false">Telegram</string>
+    <string name="recording_notification_via_app">Recording call via %1$s</string>
 
     <string name="settings_auto_record_incoming">Automatically record incoming calls</string>
     <string name="settings_auto_record_outgoing">Automatically record outgoing calls</string>

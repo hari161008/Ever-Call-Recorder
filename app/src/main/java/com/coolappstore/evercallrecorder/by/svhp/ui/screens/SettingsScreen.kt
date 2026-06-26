@@ -68,6 +68,7 @@ import com.coolappstore.evercallrecorder.by.svhp.system.openTelegramChannel
 import com.coolappstore.evercallrecorder.by.svhp.system.openUrlInBrowser
 import com.coolappstore.evercallrecorder.by.svhp.system.storage.SafHelper
 import com.coolappstore.evercallrecorder.by.svhp.system.takePersistableFolderPermission
+import com.coolappstore.evercallrecorder.by.svhp.services.call.AppCallTarget
 import com.coolappstore.evercallrecorder.by.svhp.ui.common.*
 import com.coolappstore.evercallrecorder.by.svhp.ui.viewmodels.*
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
@@ -939,6 +940,17 @@ private fun RecordingSection(
     var showAppLockVerifyDialog by remember { mutableStateOf(false) }
     var pendingAfterAppLockVerify by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    val recordWhatsAppCalls = remember(updateTrigger) { preferences.isRecordWhatsAppCallsEnabled() }
+    val recordTelegramCalls = remember(updateTrigger) { preferences.isRecordTelegramCallsEnabled() }
+    var showAppCallRecordingDialog by remember { mutableStateOf(false) }
+    val appCallRecordingSummary = buildList {
+        if (recordWhatsAppCalls) add(stringResource(R.string.app_call_target_whatsapp))
+        if (recordTelegramCalls) add(stringResource(R.string.app_call_target_telegram))
+    }.let { enabledTargets ->
+        if (enabledTargets.isEmpty()) stringResource(R.string.settings_app_call_recording_off) else enabledTargets.joinToString(", ")
+    }
+    val appCallRecordingEnabled = recordWhatsAppCalls || recordTelegramCalls
+
     val storageSupportingText = when (storageMode) {
         AppPreferences.StorageMode.PRIVATE    -> stringResource(R.string.storage_mode_private_label)
         AppPreferences.StorageMode.SAF_FOLDER -> recordingFolderLabel ?: stringResource(R.string.settings_tap_to_select_folder)
@@ -988,6 +1000,14 @@ private fun RecordingSection(
                 )
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        SectionListItem(
+            icon = Icons.Outlined.Forum,
+            headline = stringResource(R.string.settings_app_call_recording_label),
+            supporting = appCallRecordingSummary,
+            supportingColor = if (appCallRecordingEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            onClick = { showAppCallRecordingDialog = true }
         )
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
         SectionListItem(icon = storageIcon, headline = stringResource(R.string.settings_recording_folder_label), supporting = storageSupportingText, supportingColor = MaterialTheme.colorScheme.primary, onClick = onStorageClick)
@@ -1041,6 +1061,16 @@ private fun RecordingSection(
 
     if (showFileNameFormatDialog) {
         FileNameFormatDialog(initialFormat = fileNameFormat, onConfirm = { format -> actions.setFileNameTemplate(format); showFileNameFormatDialog = false }, onDismiss = { showFileNameFormatDialog = false })
+    }
+
+    if (showAppCallRecordingDialog) {
+        AppCallRecordingDialog(
+            whatsAppEnabled = recordWhatsAppCalls,
+            telegramEnabled = recordTelegramCalls,
+            onWhatsAppToggle = { enabled -> actions.setRecordCallsFromApp(AppCallTarget.WHATSAPP, enabled) },
+            onTelegramToggle = { enabled -> actions.setRecordCallsFromApp(AppCallTarget.TELEGRAM, enabled) },
+            onDismiss = { showAppCallRecordingDialog = false }
+        )
     }
 
     if (showAppLockSetupDialog) {
@@ -1436,6 +1466,7 @@ private fun SettingsScreenPreview() {
             override fun setAppLockBiometric() {}
             override fun disableAppLock() {}
             override fun verifyAppLockSecret(secret: String): Boolean = true
+            override fun setRecordCallsFromApp(target: AppCallTarget, enabled: Boolean) {}
         }
         SettingsContent(preferences = dummyPreferences, updateTrigger = 0, actions = dummyActions, contactPickerState = null, onStorageClick = {}, onOpenContactsIncoming = {}, onOpenContactsOutgoing = {}, onConfirmContacts = {}, onDismissContacts = {}, onExportLogs = {}, onBack = {})
     }

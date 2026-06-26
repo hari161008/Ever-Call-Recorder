@@ -22,10 +22,18 @@ import kotlinx.parcelize.Parcelize
  * **NOTE**: Enrichment fields are additional metadata that may not be available (null). Call [enrichMetadata] to attempt to fill them in after construction.
  *
  * @param rawPhoneNumber The raw phone number as received from the system, which may be in various formats or null.
+ *                        For [sourceApp] sessions there usually is no real phone number; the caller/contact label
+ *                        extracted from the app's call notification is stored here instead so it still shows up
+ *                        in filenames and fallbacks.
  * @param direction The direction of the call (incoming or outgoing).
  * @param standardizedNumber **Enrichment**: An optional standardized E.164 phone number for better display and filename generation.
  * @param isCrossCountry **Enrichment**: An optional flag indicating if the call is cross-country.
  * @param isEnriched **Enrichment**: A flag indicating whether enrichment has been attempted on this metadata instance.
+ * @param sourceApp Non-null when this session comes from [com.coolappstore.evercallrecorder.by.svhp.services.call.AppCallNotificationListenerService]
+ *                  instead of a normal telephony call, set to the originating app's display name (e.g. "WhatsApp").
+ *                  Drives the forced [com.coolappstore.evercallrecorder.by.svhp.integrations.scrcpy.ScrcpyAudioSource.OUTPUT]
+ *                  capture in [com.coolappstore.evercallrecorder.by.svhp.services.recording.AudioRecordingEngine] and the
+ *                  filename prefix in [com.coolappstore.evercallrecorder.by.svhp.utils.RecordingFileNameFormatter].
  */
 @Parcelize
 data class RecordingMetadata(
@@ -34,7 +42,8 @@ data class RecordingMetadata(
     // -- Enrichment fields --
     val standardizedNumber: String? = null,
     val isCrossCountry: Boolean = false,
-    val isEnriched: Boolean = false
+    val isEnriched: Boolean = false,
+    val sourceApp: String? = null
 ) : Parcelable {
     /**
      * Returns the best available phone number for display and filename purposes.

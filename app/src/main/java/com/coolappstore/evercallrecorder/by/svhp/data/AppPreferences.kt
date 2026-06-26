@@ -69,6 +69,9 @@ class AppPreferences(context: Context) {
         val APP_LOCK_METHOD = AppLockMethod.NONE
         val APP_LOCK_SECRET_HASH: String? = null
         val APP_LOCK_SALT: String? = null
+        // Record calls from apps defaults — both OFF (unticked) until the user opts in.
+        const val RECORD_WHATSAPP_CALLS = false
+        const val RECORD_TELEGRAM_CALLS = false
     }
 
     enum class Key(val id: String) {
@@ -112,7 +115,9 @@ class AppPreferences(context: Context) {
         APP_LOCK_ENABLED("app_lock_enabled"),
         APP_LOCK_METHOD("app_lock_method"),
         APP_LOCK_SECRET_HASH("app_lock_secret_hash"),
-        APP_LOCK_SALT("app_lock_salt");
+        APP_LOCK_SALT("app_lock_salt"),
+        RECORD_WHATSAPP_CALLS("record_whatsapp_calls"),
+        RECORD_TELEGRAM_CALLS("record_telegram_calls");
     }
 
     enum class IgnoreContactsMode(val key: String) {
@@ -313,4 +318,22 @@ class AppPreferences(context: Context) {
         val salt = getString(Key.APP_LOCK_SALT, DefaultsValue.APP_LOCK_SALT) ?: return false
         return com.coolappstore.evercallrecorder.by.svhp.utils.AppLockCrypto.verify(secret, salt, hash)
     }
+
+    // ── Record calls from apps (WhatsApp / Telegram VoIP calls) ────────────────
+    /**
+     * Whether calls placed/received through WhatsApp should be automatically recorded,
+     * the same way normal phone calls are. Off (unticked) by default.
+     */
+    fun isRecordWhatsAppCallsEnabled() = getBoolean(Key.RECORD_WHATSAPP_CALLS, DefaultsValue.RECORD_WHATSAPP_CALLS)
+    fun setRecordWhatsAppCallsEnabled(enabled: Boolean) = setBoolean(Key.RECORD_WHATSAPP_CALLS, enabled)
+
+    /**
+     * Whether calls placed/received through Telegram should be automatically recorded,
+     * the same way normal phone calls are. Off (unticked) by default.
+     */
+    fun isRecordTelegramCallsEnabled() = getBoolean(Key.RECORD_TELEGRAM_CALLS, DefaultsValue.RECORD_TELEGRAM_CALLS)
+    fun setRecordTelegramCallsEnabled(enabled: Boolean) = setBoolean(Key.RECORD_TELEGRAM_CALLS, enabled)
+
+    /** True if at least one "record calls from apps" target is enabled. */
+    fun isAnyAppCallRecordingEnabled() = isRecordWhatsAppCallsEnabled() || isRecordTelegramCallsEnabled()
 }
